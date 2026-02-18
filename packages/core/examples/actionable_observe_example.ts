@@ -60,10 +60,15 @@ async function example() {
 
   const currentUrl = page.url();
   await stagehand.close();
+
+  const expectedUrl = new URL(
+    "https://www.apartments.com/apartments/san-francisco-ca/min-1-bedrooms-pet-friendly-dog/",
+  );
+  const actualUrl = new URL(currentUrl);
+
   if (
-    currentUrl.includes(
-      "https://www.apartments.com/apartments/san-francisco-ca/min-1-bedrooms-pet-friendly-dog/",
-    )
+    actualUrl.origin === expectedUrl.origin &&
+    actualUrl.pathname === expectedUrl.pathname
   ) {
     console.log("✅ Success! we made it to the correct page");
   } else {
