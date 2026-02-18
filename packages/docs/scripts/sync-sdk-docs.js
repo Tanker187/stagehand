@@ -80,7 +80,13 @@ function processReadmeContent(content, config) {
   let processed = content;
   
   // Remove HTML comments
-  processed = processed.replace(/<!--[\s\S]*?-->/g, '');
+  {
+    let previous;
+    do {
+      previous = processed;
+      processed = processed.replace(/<!--[\s\S]*?-->/g, '');
+    } while (processed !== previous);
+  }
   
   // Remove entire HTML blocks with picture/source tags (badge sections)
   processed = processed.replace(/<div[^>]*>[\s\S]*?<\/div>/gi, '');
