@@ -71,9 +71,10 @@ describe("POST /v1/sessions/:id/navigate (V3)", () => {
       .waitForURL("**example.com**", { timeout: 15_000 })
       .catch(() => {});
     const pageUrl = page.url();
+    const parsedUrl = new URL(pageUrl);
     assert.ok(
-      pageUrl.includes("example.com"),
-      `Page URL should be example.com, got: ${pageUrl}`,
+      parsedUrl.hostname === "example.com",
+      `Page hostname should be example.com, got: ${parsedUrl.hostname} (full URL: ${pageUrl})`,
     );
     await browser.close();
   });
