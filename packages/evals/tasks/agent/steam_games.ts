@@ -18,7 +18,14 @@ export const steam_games: EvalFunction = async ({
     });
 
     //strictly used url check and no extract as the top games / players can vary
-    const success = page.url().includes("https://store.steampowered.com/");
+    const currentUrl = page.url();
+    let success = false;
+    try {
+      const parsed = new URL(currentUrl);
+      success = parsed.hostname === "store.steampowered.com";
+    } catch {
+      success = false;
+    }
 
     if (!success) {
       return {
