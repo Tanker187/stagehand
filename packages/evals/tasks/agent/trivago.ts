@@ -1,4 +1,4 @@
-import { EvalFunction } from "../../types/evals";
+import { EvalFunction } from "../../types/evals.js";
 
 export const trivago: EvalFunction = async ({
   debugUrl,
@@ -19,10 +19,11 @@ export const trivago: EvalFunction = async ({
     logger.log(agentResult);
 
     const url = page.url();
+    const parsedUrl = new URL(url);
 
     if (
-      url.includes("hotel-h10-tribeca-madrid") &&
-      url.includes("trivago.com")
+      parsedUrl.hostname === "www.trivago.com" &&
+      url.includes("hotel-h10-tribeca-madrid")
     ) {
       return {
         _success: true,

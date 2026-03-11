@@ -1,4 +1,4 @@
-import { EvalFunction } from "../../types/evals";
+import { EvalFunction } from "../../types/evals.js";
 import { V3Evaluator } from "@browserbasehq/stagehand";
 
 export const ubereats: EvalFunction = async ({
@@ -23,8 +23,16 @@ export const ubereats: EvalFunction = async ({
       question: "Did the agent make it to the login page?",
     });
 
-    const success =
-      evaluation === "YES" && page.url().includes("https://auth.uber.com/");
+    const currentUrl = page.url();
+    let isAuthDomain = false;
+    try {
+      const parsedUrl = new URL(currentUrl);
+      isAuthDomain = parsedUrl.origin === "https://auth.uber.com";
+    } catch {
+      isAuthDomain = false;
+    }
+
+    const success = evaluation === "YES" && isAuthDomain;
     if (!success) {
       return {
         _success: false,
