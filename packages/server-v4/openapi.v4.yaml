@@ -79,10 +79,6 @@ components:
     BrowserSessionLocalCreateRequest:
       type: object
       properties:
-        modelName:
-          description: Model name to use for AI operations
-          example: openai/gpt-4.1-nano
-          type: string
         domSettleTimeoutMs:
           type: number
         verbose:
@@ -93,8 +89,6 @@ components:
               const: 1
             - type: number
               const: 2
-        systemPrompt:
-          type: string
         selfHeal:
           type: boolean
         waitForCaptchaSolves:
@@ -103,6 +97,14 @@ components:
           type: boolean
         actTimeoutMs:
           type: number
+        llmId:
+          $ref: "#/components/schemas/LLMId"
+        actLlmId:
+          $ref: "#/components/schemas/LLMId"
+        observeLlmId:
+          $ref: "#/components/schemas/LLMId"
+        extractLlmId:
+          $ref: "#/components/schemas/LLMId"
         env:
           type: string
           const: LOCAL
@@ -111,16 +113,11 @@ components:
         localBrowserLaunchOptions:
           $ref: "#/components/schemas/LocalBrowserLaunchOptions"
       required:
-        - modelName
         - env
       additionalProperties: false
     BrowserSessionBrowserbaseCreateRequest:
       type: object
       properties:
-        modelName:
-          description: Model name to use for AI operations
-          example: openai/gpt-4.1-nano
-          type: string
         domSettleTimeoutMs:
           type: number
         verbose:
@@ -131,8 +128,6 @@ components:
               const: 1
             - type: number
               const: 2
-        systemPrompt:
-          type: string
         selfHeal:
           type: boolean
         waitForCaptchaSolves:
@@ -141,6 +136,14 @@ components:
           type: boolean
         actTimeoutMs:
           type: number
+        llmId:
+          $ref: "#/components/schemas/LLMId"
+        actLlmId:
+          $ref: "#/components/schemas/LLMId"
+        observeLlmId:
+          $ref: "#/components/schemas/LLMId"
+        extractLlmId:
+          $ref: "#/components/schemas/LLMId"
         env:
           type: string
           const: BROWSERBASE
@@ -149,7 +152,6 @@ components:
         browserbaseSessionCreateParams:
           $ref: "#/components/schemas/BrowserbaseSessionCreateParams"
       required:
-        - modelName
         - env
       additionalProperties: false
     BrowserbaseBrowserSettings:
@@ -159,6 +161,10 @@ components:
           type: boolean
         blockAds:
           type: boolean
+        captchaImageSelector:
+          type: string
+        captchaInputSelector:
+          type: string
         context:
           $ref: "#/components/schemas/BrowserbaseContext"
         extensionId:
@@ -167,9 +173,19 @@ components:
           $ref: "#/components/schemas/BrowserbaseFingerprint"
         logSession:
           type: boolean
+        os:
+          type: string
+          enum:
+            - windows
+            - mac
+            - linux
+            - mobile
+            - tablet
         recordSession:
           type: boolean
         solveCaptchas:
+          type: boolean
+        verified:
           type: boolean
         viewport:
           $ref: "#/components/schemas/BrowserbaseViewport"
@@ -297,143 +313,6 @@ components:
         - us-east-1
         - eu-central-1
         - ap-southeast-1
-    PageClickSelectorParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        selector:
-          $ref: "#/components/schemas/PageSelector"
-        button:
-          $ref: "#/components/schemas/MouseButton"
-        clickCount:
-          type: integer
-          minimum: 1
-          maximum: 9007199254740991
-      required:
-        - selector
-      additionalProperties: false
-    PageClickCoordinatesParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        x:
-          type: number
-        y:
-          type: number
-        button:
-          $ref: "#/components/schemas/MouseButton"
-        clickCount:
-          type: integer
-          minimum: 1
-          maximum: 9007199254740991
-      required:
-        - x
-        - y
-      additionalProperties: false
-    PageHoverSelectorParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        selector:
-          $ref: "#/components/schemas/PageSelector"
-      required:
-        - selector
-      additionalProperties: false
-    PageHoverCoordinatesParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        x:
-          type: number
-        y:
-          type: number
-      required:
-        - x
-        - y
-      additionalProperties: false
-    PageScrollSelectorParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        selector:
-          $ref: "#/components/schemas/PageSelector"
-        percentage:
-          type: number
-          minimum: 0
-          maximum: 100
-      required:
-        - selector
-        - percentage
-      additionalProperties: false
-    PageScrollCoordinatesParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        x:
-          type: number
-        y:
-          type: number
-        deltaX:
-          type: number
-        deltaY:
-          type: number
-      required:
-        - x
-        - y
-        - deltaY
-      additionalProperties: false
-    PageDragAndDropSelectorParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        from:
-          $ref: "#/components/schemas/PageSelector"
-        to:
-          $ref: "#/components/schemas/PageSelector"
-        button:
-          $ref: "#/components/schemas/MouseButton"
-        steps:
-          type: integer
-          exclusiveMinimum: 0
-          maximum: 9007199254740991
-        delay:
-          type: integer
-          minimum: 0
-          maximum: 9007199254740991
-      required:
-        - from
-        - to
-      additionalProperties: false
-    PageDragAndDropCoordinatesParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        from:
-          $ref: "#/components/schemas/PagePoint"
-        to:
-          $ref: "#/components/schemas/PagePoint"
-        button:
-          $ref: "#/components/schemas/MouseButton"
-        steps:
-          type: integer
-          exclusiveMinimum: 0
-          maximum: 9007199254740991
-        delay:
-          type: integer
-          minimum: 0
-          maximum: 9007199254740991
-      required:
-        - from
-        - to
-      additionalProperties: false
     SessionHeaders:
       type: object
       properties:
@@ -589,19 +468,43 @@ components:
       required:
         - closed
       additionalProperties: false
-    PageXPathResult:
+    PageClickResult:
       type: object
       properties:
-        xpath:
-          type: string
+        selector:
+          $ref: "#/components/schemas/ResultSelector"
+      required:
+        - selector
+      additionalProperties: false
+    PageHoverResult:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelector"
+      required:
+        - selector
+      additionalProperties: false
+    PageScrollResult:
+      type: object
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+      required:
+        - x
+        - y
       additionalProperties: false
     PageDragAndDropResult:
       type: object
       properties:
-        fromXpath:
-          type: string
-        toXpath:
-          type: string
+        startSelector:
+          $ref: "#/components/schemas/ResultSelector"
+        endSelector:
+          $ref: "#/components/schemas/ResultSelector"
+      required:
+        - startSelector
+        - endSelector
       additionalProperties: false
     PageTypeResult:
       type: object
@@ -684,33 +587,6 @@ components:
       required:
         - mainFrameId
       additionalProperties: false
-    PageMainFrameResult:
-      type: object
-      properties:
-        frame:
-          $ref: "#/components/schemas/PageFrame"
-      required:
-        - frame
-      additionalProperties: false
-    PageFrame:
-      type: object
-      properties:
-        frameId:
-          $ref: "#/components/schemas/FrameId"
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        sessionId:
-          anyOf:
-            - $ref: "#/components/schemas/CDPSessionId"
-            - type: "null"
-        isBrowserRemote:
-          type: boolean
-      required:
-        - frameId
-        - pageId
-        - sessionId
-        - isBrowserRemote
-      additionalProperties: false
     PageFrameTreeResult:
       type: object
       properties:
@@ -727,19 +603,6 @@ components:
             $ref: "#/components/schemas/FrameId"
       required:
         - frameIds
-      additionalProperties: false
-    PageGetOrdinalResult:
-      type: object
-      properties:
-        frameId:
-          $ref: "#/components/schemas/FrameId"
-        ordinal:
-          type: integer
-          minimum: 0
-          maximum: 9007199254740991
-      required:
-        - frameId
-        - ordinal
       additionalProperties: false
     PageTitleResult:
       type: object
@@ -798,6 +661,25 @@ components:
       required:
         - frames
       additionalProperties: false
+    PageFrame:
+      type: object
+      properties:
+        frameId:
+          $ref: "#/components/schemas/FrameId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        sessionId:
+          anyOf:
+            - $ref: "#/components/schemas/CDPSessionId"
+            - type: "null"
+        isBrowserRemote:
+          type: boolean
+      required:
+        - frameId
+        - pageId
+        - sessionId
+        - isBrowserRemote
+      additionalProperties: false
     PageSetViewportSizeResult:
       type: object
       properties:
@@ -834,7 +716,7 @@ components:
       type: object
       properties:
         selector:
-          $ref: "#/components/schemas/PageSelector"
+          $ref: "#/components/schemas/ElementSelector"
         matched:
           type: boolean
       required:
@@ -1000,6 +882,42 @@ components:
       type: object
       properties: {}
       additionalProperties: false
+    BrowserSessionUpdateRequest:
+      type: object
+      properties:
+        domSettleTimeoutMs:
+          type: number
+        verbose:
+          anyOf:
+            - type: number
+              const: 0
+            - type: number
+              const: 1
+            - type: number
+              const: 2
+        selfHeal:
+          type: boolean
+        waitForCaptchaSolves:
+          type: boolean
+        experimental:
+          type: boolean
+        actTimeoutMs:
+          type: number
+        llmId:
+          $ref: "#/components/schemas/LLMId"
+        actLlmId:
+          anyOf:
+            - $ref: "#/components/schemas/LLMId"
+            - type: "null"
+        observeLlmId:
+          anyOf:
+            - $ref: "#/components/schemas/LLMId"
+            - type: "null"
+        extractLlmId:
+          anyOf:
+            - $ref: "#/components/schemas/LLMId"
+            - type: "null"
+      additionalProperties: false
     BrowserSession:
       type: object
       properties:
@@ -1009,8 +927,6 @@ components:
           $ref: "#/components/schemas/BrowserSessionEnv"
         status:
           $ref: "#/components/schemas/BrowserSessionStatus"
-        modelName:
-          type: string
         cdpUrl:
           anyOf:
             - type: string
@@ -1033,8 +949,6 @@ components:
               const: 1
             - type: number
               const: 2
-        systemPrompt:
-          type: string
         selfHeal:
           type: boolean
         waitForCaptchaSolves:
@@ -1043,12 +957,29 @@ components:
           type: boolean
         actTimeoutMs:
           type: number
+        llmId:
+          $ref: "#/components/schemas/LLMId"
+        actLlmId:
+          anyOf:
+            - $ref: "#/components/schemas/LLMId"
+            - type: "null"
+        observeLlmId:
+          anyOf:
+            - $ref: "#/components/schemas/LLMId"
+            - type: "null"
+        extractLlmId:
+          anyOf:
+            - $ref: "#/components/schemas/LLMId"
+            - type: "null"
       required:
         - id
         - env
         - status
-        - modelName
         - available
+        - llmId
+        - actLlmId
+        - observeLlmId
+        - extractLlmId
       additionalProperties: false
     BrowserSessionResult:
       type: object
@@ -2368,6 +2299,153 @@ components:
         - $ref: "#/components/schemas/BrowserSessionIsAdvancedStealthAction"
         - $ref: "#/components/schemas/BrowserSessionSetViewportSizeAction"
         - $ref: "#/components/schemas/BrowserSessionCloseAction"
+    LLMId:
+      example: 550e8400-e29b-41d4-a716-446655440000
+      type: string
+      format: uuid
+      pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+    LLMCreateRequest:
+      type: object
+      properties:
+        displayName:
+          anyOf:
+            - type: string
+            - type: "null"
+        modelName:
+          type: string
+        baseUrl:
+          anyOf:
+            - type: string
+              format: uri
+            - type: "null"
+        systemPrompt:
+          anyOf:
+            - type: string
+            - type: "null"
+        providerOptions:
+          anyOf:
+            - type: object
+              properties:
+                temperature:
+                  type: number
+                organization:
+                  type: string
+                project:
+                  type: string
+                location:
+                  type: string
+              additionalProperties: false
+            - type: "null"
+      required:
+        - modelName
+      additionalProperties: false
+    LLMUpdateRequest:
+      type: object
+      properties:
+        displayName:
+          anyOf:
+            - type: string
+            - type: "null"
+        modelName:
+          type: string
+        baseUrl:
+          anyOf:
+            - type: string
+              format: uri
+            - type: "null"
+        systemPrompt:
+          anyOf:
+            - type: string
+            - type: "null"
+        providerOptions:
+          anyOf:
+            - type: object
+              properties:
+                temperature:
+                  type: number
+                organization:
+                  type: string
+                project:
+                  type: string
+                location:
+                  type: string
+              additionalProperties: false
+            - type: "null"
+      additionalProperties: false
+    LLM:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+        source:
+          type: string
+          enum:
+            - user
+            - system-default
+        displayName:
+          anyOf:
+            - type: string
+            - type: "null"
+        modelName:
+          type: string
+        baseUrl:
+          anyOf:
+            - type: string
+              format: uri
+            - type: "null"
+        systemPrompt:
+          anyOf:
+            - type: string
+            - type: "null"
+        providerOptions:
+          anyOf:
+            - type: object
+              properties:
+                temperature:
+                  type: number
+                organization:
+                  type: string
+                project:
+                  type: string
+                location:
+                  type: string
+              additionalProperties: false
+            - type: "null"
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - source
+        - displayName
+        - modelName
+        - baseUrl
+        - systemPrompt
+        - providerOptions
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+    LLMResult:
+      type: object
+      properties:
+        llm:
+          $ref: "#/components/schemas/LLM"
+      required:
+        - llm
+      additionalProperties: false
+    LLMListResult:
+      type: object
+      properties:
+        llms:
+          type: array
+          items:
+            $ref: "#/components/schemas/LLM"
+      required:
+        - llms
+      additionalProperties: false
     RequestId:
       example: req_01JXAMPLE
       type: string
@@ -2458,11 +2536,8 @@ components:
         - goForward
         - targetId
         - mainFrameId
-        - mainFrame
         - getFullFrameTree
-        - asProtocolFrameTree
         - listAllFrameIds
-        - getOrdinal
         - title
         - url
         - screenshot
@@ -2471,12 +2546,16 @@ components:
         - setViewportSize
         - setExtraHTTPHeaders
         - waitForLoadState
-        - waitForMainLoadState
         - waitForSelector
         - waitForTimeout
         - evaluate
         - sendCDP
         - close
+        - elementInfo
+        - fill
+        - highlight
+        - selectOption
+        - setInputFiles
     PageActionStatus:
       type: string
       enum:
@@ -2485,17 +2564,52 @@ components:
         - completed
         - failed
         - canceled
-    PageSelector:
+    XPathSelector:
       type: object
       properties:
         xpath:
           example: //button[text()='Submit']
           type: string
           minLength: 1
+        idx:
+          example: 0
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
       required:
         - xpath
       additionalProperties: false
-    PagePoint:
+    CssSelector:
+      type: object
+      properties:
+        css:
+          example: .btn-submit
+          type: string
+          minLength: 1
+        idx:
+          example: 0
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+      required:
+        - css
+      additionalProperties: false
+    TextSelector:
+      type: object
+      properties:
+        text:
+          example: Submit
+          type: string
+          minLength: 1
+        idx:
+          example: 0
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+      required:
+        - text
+      additionalProperties: false
+    CoordinateSelector:
       type: object
       properties:
         x:
@@ -2505,6 +2619,37 @@ components:
       required:
         - x
         - y
+      additionalProperties: false
+    Selector:
+      anyOf:
+        - $ref: "#/components/schemas/XPathSelector"
+        - $ref: "#/components/schemas/CssSelector"
+        - $ref: "#/components/schemas/TextSelector"
+        - $ref: "#/components/schemas/CoordinateSelector"
+    ElementSelector:
+      anyOf:
+        - $ref: "#/components/schemas/XPathSelector"
+        - $ref: "#/components/schemas/CssSelector"
+        - $ref: "#/components/schemas/TextSelector"
+    ResultSelector:
+      type: object
+      properties:
+        xpath:
+          type: string
+        css:
+          type: string
+        text:
+          type: string
+        coordinates:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+          required:
+            - x
+            - y
       additionalProperties: false
     PageHeaders:
       type: object
@@ -2549,21 +2694,129 @@ components:
       type: string
       minLength: 1
     PageClickParams:
-      anyOf:
-        - $ref: "#/components/schemas/PageClickSelectorParams"
-        - $ref: "#/components/schemas/PageClickCoordinatesParams"
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        selector:
+          $ref: "#/components/schemas/Selector"
+        button:
+          $ref: "#/components/schemas/MouseButton"
+        clickCount:
+          type: integer
+          minimum: 1
+          maximum: 3
+        returnSelector:
+          default: false
+          type: boolean
+        method:
+          default: xy
+          type: string
+          enum:
+            - jsevent
+            - xy
+      required:
+        - selector
+      additionalProperties: false
     PageHoverParams:
-      anyOf:
-        - $ref: "#/components/schemas/PageHoverSelectorParams"
-        - $ref: "#/components/schemas/PageHoverCoordinatesParams"
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        selector:
+          $ref: "#/components/schemas/Selector"
+        returnSelector:
+          default: false
+          type: boolean
+      required:
+        - selector
+      additionalProperties: false
+    PageScrollByOffsetParams:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        cursorPosition:
+          $ref: "#/components/schemas/Selector"
+        offset:
+          type: object
+          properties:
+            x:
+              default: 0
+              type: number
+            y:
+              type: number
+          required:
+            - y
+          additionalProperties: false
+      required:
+        - offset
+      additionalProperties: false
+    PageScrollByPagesParams:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        cursorPosition:
+          $ref: "#/components/schemas/Selector"
+        pages:
+          default: 1
+          type: number
+          minimum: -100
+          maximum: 100
+        delayBetweenMs:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+      additionalProperties: false
+    PageScrollToTargetParams:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        target:
+          $ref: "#/components/schemas/Selector"
+        position:
+          default: center
+          type: string
+          enum:
+            - center
+            - top
+            - bottom
+      required:
+        - target
+      additionalProperties: false
     PageScrollParams:
       anyOf:
-        - $ref: "#/components/schemas/PageScrollSelectorParams"
-        - $ref: "#/components/schemas/PageScrollCoordinatesParams"
+        - $ref: "#/components/schemas/PageScrollByOffsetParams"
+        - $ref: "#/components/schemas/PageScrollByPagesParams"
+        - $ref: "#/components/schemas/PageScrollToTargetParams"
     PageDragAndDropParams:
-      anyOf:
-        - $ref: "#/components/schemas/PageDragAndDropSelectorParams"
-        - $ref: "#/components/schemas/PageDragAndDropCoordinatesParams"
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        from:
+          $ref: "#/components/schemas/Selector"
+        to:
+          $ref: "#/components/schemas/Selector"
+        button:
+          $ref: "#/components/schemas/MouseButton"
+        steps:
+          type: integer
+          exclusiveMinimum: 0
+          maximum: 9007199254740991
+        delay:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        returnSelector:
+          default: false
+          type: boolean
+      required:
+        - from
+        - to
+      additionalProperties: false
     PageTypeParams:
       type: object
       properties:
@@ -2678,43 +2931,17 @@ components:
         pageId:
           $ref: "#/components/schemas/PageId"
       additionalProperties: false
-    PageMainFrameParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-      additionalProperties: false
     PageGetFullFrameTreeParams:
       type: object
       properties:
         pageId:
           $ref: "#/components/schemas/PageId"
       additionalProperties: false
-    PageAsProtocolFrameTreeParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        rootMainFrameId:
-          $ref: "#/components/schemas/FrameId"
-      required:
-        - rootMainFrameId
-      additionalProperties: false
     PageListAllFrameIdsParams:
       type: object
       properties:
         pageId:
           $ref: "#/components/schemas/PageId"
-      additionalProperties: false
-    PageGetOrdinalParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        frameId:
-          $ref: "#/components/schemas/FrameId"
-      required:
-        - frameId
       additionalProperties: false
     PageTitleParams:
       type: object
@@ -2814,27 +3041,13 @@ components:
       required:
         - state
       additionalProperties: false
-    PageWaitForMainLoadStateParams:
-      type: object
-      properties:
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        state:
-          $ref: "#/components/schemas/LoadState"
-        timeoutMs:
-          type: integer
-          minimum: 0
-          maximum: 9007199254740991
-      required:
-        - state
-      additionalProperties: false
     PageWaitForSelectorParams:
       type: object
       properties:
         pageId:
           $ref: "#/components/schemas/PageId"
         selector:
-          $ref: "#/components/schemas/PageSelector"
+          $ref: "#/components/schemas/ElementSelector"
         state:
           $ref: "#/components/schemas/WaitForSelectorState"
         timeout:
@@ -2887,6 +3100,103 @@ components:
       properties:
         pageId:
           $ref: "#/components/schemas/PageId"
+      additionalProperties: false
+    PageFillParams:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        selector:
+          $ref: "#/components/schemas/Selector"
+        value:
+          type: string
+        returnSelector:
+          default: false
+          type: boolean
+      required:
+        - selector
+        - value
+      additionalProperties: false
+    PageHighlightParams:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        selector:
+          $ref: "#/components/schemas/Selector"
+        color:
+          type: string
+        durationMs:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        returnSelector:
+          default: false
+          type: boolean
+      required:
+        - selector
+      additionalProperties: false
+    PageSelectOptionParams:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        selector:
+          $ref: "#/components/schemas/Selector"
+        values:
+          type: array
+          items:
+            type: string
+        returnSelector:
+          default: false
+          type: boolean
+      required:
+        - selector
+        - values
+      additionalProperties: false
+    PageSetInputFilesParams:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        selector:
+          $ref: "#/components/schemas/Selector"
+        files:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              mimeType:
+                type: string
+              base64:
+                type: string
+            required:
+              - name
+              - mimeType
+              - base64
+            additionalProperties: false
+        returnSelector:
+          default: false
+          type: boolean
+      required:
+        - selector
+        - files
+      additionalProperties: false
+    PageElementInfoParams:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        selector:
+          $ref: "#/components/schemas/Selector"
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/ElementInfoField"
+      required:
+        - selector
       additionalProperties: false
     PageClickRequest:
       type: object
@@ -3109,19 +3419,6 @@ components:
         - sessionId
         - params
       additionalProperties: false
-    PageWaitForMainLoadStateRequest:
-      type: object
-      properties:
-        id:
-          $ref: "#/components/schemas/RequestId"
-        sessionId:
-          $ref: "#/components/schemas/SessionId"
-        params:
-          $ref: "#/components/schemas/PageWaitForMainLoadStateParams"
-      required:
-        - sessionId
-        - params
-      additionalProperties: false
     PageWaitForSelectorRequest:
       type: object
       properties:
@@ -3187,6 +3484,71 @@ components:
         - sessionId
         - params
       additionalProperties: false
+    PageFillRequest:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/RequestId"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        params:
+          $ref: "#/components/schemas/PageFillParams"
+      required:
+        - sessionId
+        - params
+      additionalProperties: false
+    PageHighlightRequest:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/RequestId"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        params:
+          $ref: "#/components/schemas/PageHighlightParams"
+      required:
+        - sessionId
+        - params
+      additionalProperties: false
+    PageSelectOptionRequest:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/RequestId"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        params:
+          $ref: "#/components/schemas/PageSelectOptionParams"
+      required:
+        - sessionId
+        - params
+      additionalProperties: false
+    PageSetInputFilesRequest:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/RequestId"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        params:
+          $ref: "#/components/schemas/PageSetInputFilesParams"
+      required:
+        - sessionId
+        - params
+      additionalProperties: false
+    PageElementInfoRequest:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/RequestId"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        params:
+          $ref: "#/components/schemas/PageElementInfoParams"
+      required:
+        - sessionId
+        - params
+      additionalProperties: false
     PageClickAction:
       type: object
       properties:
@@ -3215,7 +3577,7 @@ components:
           $ref: "#/components/schemas/PageClickParams"
         result:
           anyOf:
-            - $ref: "#/components/schemas/PageXPathResult"
+            - $ref: "#/components/schemas/PageClickResult"
             - type: "null"
       required:
         - id
@@ -3256,7 +3618,7 @@ components:
           $ref: "#/components/schemas/PageHoverParams"
         result:
           anyOf:
-            - $ref: "#/components/schemas/PageXPathResult"
+            - $ref: "#/components/schemas/PageHoverResult"
             - type: "null"
       required:
         - id
@@ -3297,7 +3659,7 @@ components:
           $ref: "#/components/schemas/PageScrollParams"
         result:
           anyOf:
-            - $ref: "#/components/schemas/PageXPathResult"
+            - $ref: "#/components/schemas/PageScrollResult"
             - type: "null"
       required:
         - id
@@ -3761,47 +4123,6 @@ components:
         - params
         - result
       additionalProperties: false
-    PageMainFrameAction:
-      type: object
-      properties:
-        id:
-          $ref: "#/components/schemas/ActionId"
-        method:
-          type: string
-          const: mainFrame
-        status:
-          $ref: "#/components/schemas/PageActionStatus"
-        sessionId:
-          $ref: "#/components/schemas/SessionId"
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        createdAt:
-          $ref: "#/components/schemas/Timestamp"
-        updatedAt:
-          $ref: "#/components/schemas/Timestamp"
-        completedAt:
-          $ref: "#/components/schemas/Timestamp"
-        error:
-          anyOf:
-            - $ref: "#/components/schemas/PageError"
-            - type: "null"
-        params:
-          $ref: "#/components/schemas/PageMainFrameParams"
-        result:
-          anyOf:
-            - $ref: "#/components/schemas/PageMainFrameResult"
-            - type: "null"
-      required:
-        - id
-        - method
-        - status
-        - sessionId
-        - createdAt
-        - updatedAt
-        - error
-        - params
-        - result
-      additionalProperties: false
     PageGetFullFrameTreeAction:
       type: object
       properties:
@@ -3828,47 +4149,6 @@ components:
             - type: "null"
         params:
           $ref: "#/components/schemas/PageGetFullFrameTreeParams"
-        result:
-          anyOf:
-            - $ref: "#/components/schemas/PageFrameTreeResult"
-            - type: "null"
-      required:
-        - id
-        - method
-        - status
-        - sessionId
-        - createdAt
-        - updatedAt
-        - error
-        - params
-        - result
-      additionalProperties: false
-    PageAsProtocolFrameTreeAction:
-      type: object
-      properties:
-        id:
-          $ref: "#/components/schemas/ActionId"
-        method:
-          type: string
-          const: asProtocolFrameTree
-        status:
-          $ref: "#/components/schemas/PageActionStatus"
-        sessionId:
-          $ref: "#/components/schemas/SessionId"
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        createdAt:
-          $ref: "#/components/schemas/Timestamp"
-        updatedAt:
-          $ref: "#/components/schemas/Timestamp"
-        completedAt:
-          $ref: "#/components/schemas/Timestamp"
-        error:
-          anyOf:
-            - $ref: "#/components/schemas/PageError"
-            - type: "null"
-        params:
-          $ref: "#/components/schemas/PageAsProtocolFrameTreeParams"
         result:
           anyOf:
             - $ref: "#/components/schemas/PageFrameTreeResult"
@@ -3913,47 +4193,6 @@ components:
         result:
           anyOf:
             - $ref: "#/components/schemas/PageListAllFrameIdsResult"
-            - type: "null"
-      required:
-        - id
-        - method
-        - status
-        - sessionId
-        - createdAt
-        - updatedAt
-        - error
-        - params
-        - result
-      additionalProperties: false
-    PageGetOrdinalAction:
-      type: object
-      properties:
-        id:
-          $ref: "#/components/schemas/ActionId"
-        method:
-          type: string
-          const: getOrdinal
-        status:
-          $ref: "#/components/schemas/PageActionStatus"
-        sessionId:
-          $ref: "#/components/schemas/SessionId"
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        createdAt:
-          $ref: "#/components/schemas/Timestamp"
-        updatedAt:
-          $ref: "#/components/schemas/Timestamp"
-        completedAt:
-          $ref: "#/components/schemas/Timestamp"
-        error:
-          anyOf:
-            - $ref: "#/components/schemas/PageError"
-            - type: "null"
-        params:
-          $ref: "#/components/schemas/PageGetOrdinalParams"
-        result:
-          anyOf:
-            - $ref: "#/components/schemas/PageGetOrdinalResult"
             - type: "null"
       required:
         - id
@@ -4294,47 +4533,6 @@ components:
         - params
         - result
       additionalProperties: false
-    PageWaitForMainLoadStateAction:
-      type: object
-      properties:
-        id:
-          $ref: "#/components/schemas/ActionId"
-        method:
-          type: string
-          const: waitForMainLoadState
-        status:
-          $ref: "#/components/schemas/PageActionStatus"
-        sessionId:
-          $ref: "#/components/schemas/SessionId"
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        createdAt:
-          $ref: "#/components/schemas/Timestamp"
-        updatedAt:
-          $ref: "#/components/schemas/Timestamp"
-        completedAt:
-          $ref: "#/components/schemas/Timestamp"
-        error:
-          anyOf:
-            - $ref: "#/components/schemas/PageError"
-            - type: "null"
-        params:
-          $ref: "#/components/schemas/PageWaitForMainLoadStateParams"
-        result:
-          anyOf:
-            - $ref: "#/components/schemas/PageWaitForLoadStateResult"
-            - type: "null"
-      required:
-        - id
-        - method
-        - status
-        - sessionId
-        - createdAt
-        - updatedAt
-        - error
-        - params
-        - result
-      additionalProperties: false
     PageWaitForSelectorAction:
       type: object
       properties:
@@ -4540,6 +4738,211 @@ components:
         - params
         - result
       additionalProperties: false
+    PageFillAction:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: fill
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageFillParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageFillResult"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageHighlightAction:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: highlight
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageHighlightParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageHighlightResult"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageSelectOptionAction:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: selectOption
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageSelectOptionParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageSelectOptionResult"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageSetInputFilesAction:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: setInputFiles
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageSetInputFilesParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageSetInputFilesResult"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageElementInfoAction:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: elementInfo
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageElementInfoParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageElementInfoResult"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
     PageAction:
       anyOf:
         - $ref: "#/components/schemas/PageClickAction"
@@ -4556,11 +4959,8 @@ components:
         - $ref: "#/components/schemas/PageGoForwardAction"
         - $ref: "#/components/schemas/PageTargetIdAction"
         - $ref: "#/components/schemas/PageMainFrameIdAction"
-        - $ref: "#/components/schemas/PageMainFrameAction"
         - $ref: "#/components/schemas/PageGetFullFrameTreeAction"
-        - $ref: "#/components/schemas/PageAsProtocolFrameTreeAction"
         - $ref: "#/components/schemas/PageListAllFrameIdsAction"
-        - $ref: "#/components/schemas/PageGetOrdinalAction"
         - $ref: "#/components/schemas/PageTitleAction"
         - $ref: "#/components/schemas/PageUrlAction"
         - $ref: "#/components/schemas/PageScreenshotAction"
@@ -4569,12 +4969,220 @@ components:
         - $ref: "#/components/schemas/PageSetViewportSizeAction"
         - $ref: "#/components/schemas/PageSetExtraHTTPHeadersAction"
         - $ref: "#/components/schemas/PageWaitForLoadStateAction"
-        - $ref: "#/components/schemas/PageWaitForMainLoadStateAction"
         - $ref: "#/components/schemas/PageWaitForSelectorAction"
         - $ref: "#/components/schemas/PageWaitForTimeoutAction"
         - $ref: "#/components/schemas/PageEvaluateAction"
         - $ref: "#/components/schemas/PageSendCDPAction"
         - $ref: "#/components/schemas/PageCloseAction"
+        - $ref: "#/components/schemas/PageElementInfoAction"
+        - $ref: "#/components/schemas/PageFillAction"
+        - $ref: "#/components/schemas/PageHighlightAction"
+        - $ref: "#/components/schemas/PageSelectOptionAction"
+        - $ref: "#/components/schemas/PageSetInputFilesAction"
+    PageFillResult:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelector"
+        value:
+          type: string
+      required:
+        - selector
+        - value
+      additionalProperties: false
+    PageHighlightResult:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelector"
+        highlighted:
+          type: boolean
+      required:
+        - selector
+        - highlighted
+      additionalProperties: false
+    PageSelectOptionResult:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelector"
+        selected:
+          type: array
+          items:
+            type: string
+      required:
+        - selector
+        - selected
+      additionalProperties: false
+    PageSetInputFilesResult:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelector"
+        files:
+          type: array
+          items:
+            type: string
+      required:
+        - selector
+        - files
+      additionalProperties: false
+    ElementInfoField:
+      type: string
+      enum:
+        - visibility
+        - domRects
+        - content
+        - inputInfo
+        - ariaInfo
+        - attributes
+        - styles
+    ElementInfoVisibility:
+      type: object
+      properties:
+        isInViewport:
+          type: boolean
+        isOccluded:
+          type: boolean
+      required:
+        - isInViewport
+        - isOccluded
+      additionalProperties: false
+    ElementInfoDomRect:
+      type: object
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+        width:
+          type: number
+        height:
+          type: number
+      required:
+        - x
+        - y
+        - width
+        - height
+      additionalProperties: false
+    ElementInfoDomRects:
+      type: object
+      properties:
+        rects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ElementInfoDomRect"
+      required:
+        - rects
+      additionalProperties: false
+    ElementInfoContent:
+      type: object
+      properties:
+        innerText:
+          type: string
+        textContent:
+          type: string
+        innerHTML:
+          type: string
+      required:
+        - innerText
+        - textContent
+        - innerHTML
+      additionalProperties: false
+    ElementInfoInputInfo:
+      type: object
+      properties:
+        value:
+          type: string
+        isChecked:
+          type: boolean
+      required:
+        - value
+        - isChecked
+      additionalProperties: false
+    ElementInfoAriaInfo:
+      type: object
+      properties:
+        role:
+          type: string
+        attributes:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties:
+            type: string
+      required:
+        - role
+        - attributes
+      additionalProperties: false
+    ElementInfoAttributes:
+      type: object
+      properties:
+        values:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties:
+            type: string
+      required:
+        - values
+      additionalProperties: false
+    ElementInfoStyles:
+      type: object
+      properties:
+        computed:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties:
+            type: string
+      required:
+        - computed
+      additionalProperties: false
+    PageElementInfoResult:
+      type: object
+      properties:
+        count:
+          default: 0
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        selector:
+          default: {}
+          $ref: "#/components/schemas/ResultSelector"
+        tagName:
+          type: string
+        backendNodeId:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        visibility:
+          default:
+            isInViewport: false
+            isOccluded: false
+          $ref: "#/components/schemas/ElementInfoVisibility"
+        domRects:
+          default:
+            rects: []
+          $ref: "#/components/schemas/ElementInfoDomRects"
+        content:
+          default:
+            innerText: ""
+            textContent: ""
+            innerHTML: ""
+          $ref: "#/components/schemas/ElementInfoContent"
+        inputInfo:
+          $ref: "#/components/schemas/ElementInfoInputInfo"
+        ariaInfo:
+          $ref: "#/components/schemas/ElementInfoAriaInfo"
+        attributes:
+          $ref: "#/components/schemas/ElementInfoAttributes"
+        styles:
+          $ref: "#/components/schemas/ElementInfoStyles"
+      required:
+        - tagName
+        - backendNodeId
+      additionalProperties: false
     BrowserSessionResponse:
       type: object
       properties:
@@ -4586,18 +5194,6 @@ components:
       required:
         - success
         - data
-      additionalProperties: false
-    BrowserSessionErrorResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          const: false
-        message:
-          type: string
-      required:
-        - success
-        - message
       additionalProperties: false
     BrowserSessionV4ErrorResponse:
       type: object
@@ -4895,6 +5491,42 @@ components:
         - error
         - actions
       additionalProperties: false
+    LLMErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: false
+        message:
+          type: string
+      required:
+        - success
+        - message
+      additionalProperties: false
+    LLMResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/LLMResult"
+      required:
+        - success
+        - data
+      additionalProperties: false
+    LLMListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/LLMListResult"
+      required:
+        - success
+        - data
+      additionalProperties: false
     V4ErrorResponse:
       type: object
       properties:
@@ -4912,7 +5544,7 @@ components:
             - type: string
             - type: "null"
         action:
-          $ref: "#/components/schemas/PageAction"
+          $ref: "#/components/schemas/PageActionOutput"
       required:
         - success
         - error
@@ -4928,7 +5560,7 @@ components:
         error:
           type: "null"
         action:
-          $ref: "#/components/schemas/PageClickAction"
+          $ref: "#/components/schemas/PageClickActionOutput"
       required:
         - success
         - error
@@ -4943,7 +5575,7 @@ components:
         error:
           type: "null"
         action:
-          $ref: "#/components/schemas/PageHoverAction"
+          $ref: "#/components/schemas/PageHoverActionOutput"
       required:
         - success
         - error
@@ -4958,7 +5590,7 @@ components:
         error:
           type: "null"
         action:
-          $ref: "#/components/schemas/PageScrollAction"
+          $ref: "#/components/schemas/PageScrollActionOutput"
       required:
         - success
         - error
@@ -4973,7 +5605,7 @@ components:
         error:
           type: "null"
         action:
-          $ref: "#/components/schemas/PageDragAndDropAction"
+          $ref: "#/components/schemas/PageDragAndDropActionOutput"
       required:
         - success
         - error
@@ -5129,21 +5761,6 @@ components:
         - error
         - action
       additionalProperties: false
-    PageMainFrameResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          const: true
-        error:
-          type: "null"
-        action:
-          $ref: "#/components/schemas/PageMainFrameAction"
-      required:
-        - success
-        - error
-        - action
-      additionalProperties: false
     PageGetFullFrameTreeResponse:
       type: object
       properties:
@@ -5159,21 +5776,6 @@ components:
         - error
         - action
       additionalProperties: false
-    PageAsProtocolFrameTreeResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          const: true
-        error:
-          type: "null"
-        action:
-          $ref: "#/components/schemas/PageAsProtocolFrameTreeAction"
-      required:
-        - success
-        - error
-        - action
-      additionalProperties: false
     PageListAllFrameIdsResponse:
       type: object
       properties:
@@ -5184,21 +5786,6 @@ components:
           type: "null"
         action:
           $ref: "#/components/schemas/PageListAllFrameIdsAction"
-      required:
-        - success
-        - error
-        - action
-      additionalProperties: false
-    PageGetOrdinalResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          const: true
-        error:
-          type: "null"
-        action:
-          $ref: "#/components/schemas/PageGetOrdinalAction"
       required:
         - success
         - error
@@ -5324,21 +5911,6 @@ components:
         - error
         - action
       additionalProperties: false
-    PageWaitForMainLoadStateResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          const: true
-        error:
-          type: "null"
-        action:
-          $ref: "#/components/schemas/PageWaitForMainLoadStateAction"
-      required:
-        - success
-        - error
-        - action
-      additionalProperties: false
     PageWaitForSelectorResponse:
       type: object
       properties:
@@ -5414,6 +5986,81 @@ components:
         - error
         - action
       additionalProperties: false
+    PageFillResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        error:
+          type: "null"
+        action:
+          $ref: "#/components/schemas/PageFillActionOutput"
+      required:
+        - success
+        - error
+        - action
+      additionalProperties: false
+    PageHighlightResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        error:
+          type: "null"
+        action:
+          $ref: "#/components/schemas/PageHighlightActionOutput"
+      required:
+        - success
+        - error
+        - action
+      additionalProperties: false
+    PageSelectOptionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        error:
+          type: "null"
+        action:
+          $ref: "#/components/schemas/PageSelectOptionActionOutput"
+      required:
+        - success
+        - error
+        - action
+      additionalProperties: false
+    PageSetInputFilesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        error:
+          type: "null"
+        action:
+          $ref: "#/components/schemas/PageSetInputFilesActionOutput"
+      required:
+        - success
+        - error
+        - action
+      additionalProperties: false
+    PageElementInfoResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        error:
+          type: "null"
+        action:
+          $ref: "#/components/schemas/PageElementInfoActionOutput"
+      required:
+        - success
+        - error
+        - action
+      additionalProperties: false
     PageActionDetailsResponse:
       type: object
       properties:
@@ -5423,7 +6070,7 @@ components:
         error:
           type: "null"
         action:
-          $ref: "#/components/schemas/PageAction"
+          $ref: "#/components/schemas/PageActionOutput"
       required:
         - success
         - error
@@ -5440,7 +6087,7 @@ components:
         actions:
           type: array
           items:
-            $ref: "#/components/schemas/PageAction"
+            $ref: "#/components/schemas/PageActionOutput"
       required:
         - success
         - error
@@ -5453,6 +6100,10 @@ components:
           type: boolean
         blockAds:
           type: boolean
+        captchaImageSelector:
+          type: string
+        captchaInputSelector:
+          type: string
         context:
           $ref: "#/components/schemas/BrowserbaseContextOutput"
         extensionId:
@@ -5461,9 +6112,19 @@ components:
           $ref: "#/components/schemas/BrowserbaseFingerprintOutput"
         logSession:
           type: boolean
+        os:
+          type: string
+          enum:
+            - windows
+            - mac
+            - linux
+            - mobile
+            - tablet
         recordSession:
           type: boolean
         solveCaptchas:
+          type: boolean
+        verified:
           type: boolean
         viewport:
           $ref: "#/components/schemas/BrowserbaseViewportOutput"
@@ -5592,6 +6253,33 @@ components:
         - type
         - server
       additionalProperties: false
+    PageClickResultOutput:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelectorOutput"
+      required:
+        - selector
+      additionalProperties: false
+    PageHoverResultOutput:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelectorOutput"
+      required:
+        - selector
+      additionalProperties: false
+    PageDragAndDropResultOutput:
+      type: object
+      properties:
+        startSelector:
+          $ref: "#/components/schemas/ResultSelectorOutput"
+        endSelector:
+          $ref: "#/components/schemas/ResultSelectorOutput"
+      required:
+        - startSelector
+        - endSelector
+      additionalProperties: false
     SessionHeadersOutput:
       type: object
       properties:
@@ -5606,10 +6294,6 @@ components:
     BrowserSessionLocalCreateRequestOutput:
       type: object
       properties:
-        modelName:
-          description: Model name to use for AI operations
-          example: openai/gpt-4.1-nano
-          type: string
         domSettleTimeoutMs:
           type: number
         verbose:
@@ -5620,8 +6304,6 @@ components:
               const: 1
             - type: number
               const: 2
-        systemPrompt:
-          type: string
         selfHeal:
           type: boolean
         waitForCaptchaSolves:
@@ -5630,6 +6312,14 @@ components:
           type: boolean
         actTimeoutMs:
           type: number
+        llmId:
+          $ref: "#/components/schemas/LLMId"
+        actLlmId:
+          $ref: "#/components/schemas/LLMId"
+        observeLlmId:
+          $ref: "#/components/schemas/LLMId"
+        extractLlmId:
+          $ref: "#/components/schemas/LLMId"
         env:
           type: string
           const: LOCAL
@@ -5638,16 +6328,11 @@ components:
         localBrowserLaunchOptions:
           $ref: "#/components/schemas/LocalBrowserLaunchOptionsOutput"
       required:
-        - modelName
         - env
       additionalProperties: false
     BrowserSessionBrowserbaseCreateRequestOutput:
       type: object
       properties:
-        modelName:
-          description: Model name to use for AI operations
-          example: openai/gpt-4.1-nano
-          type: string
         domSettleTimeoutMs:
           type: number
         verbose:
@@ -5658,8 +6343,6 @@ components:
               const: 1
             - type: number
               const: 2
-        systemPrompt:
-          type: string
         selfHeal:
           type: boolean
         waitForCaptchaSolves:
@@ -5668,6 +6351,14 @@ components:
           type: boolean
         actTimeoutMs:
           type: number
+        llmId:
+          $ref: "#/components/schemas/LLMId"
+        actLlmId:
+          $ref: "#/components/schemas/LLMId"
+        observeLlmId:
+          $ref: "#/components/schemas/LLMId"
+        extractLlmId:
+          $ref: "#/components/schemas/LLMId"
         env:
           type: string
           const: BROWSERBASE
@@ -5676,7 +6367,6 @@ components:
         browserbaseSessionCreateParams:
           $ref: "#/components/schemas/BrowserbaseSessionCreateParamsOutput"
       required:
-        - modelName
         - env
       additionalProperties: false
     LocalBrowserLaunchOptionsOutput:
@@ -5790,8 +6480,6 @@ components:
           $ref: "#/components/schemas/BrowserSessionEnv"
         status:
           $ref: "#/components/schemas/BrowserSessionStatus"
-        modelName:
-          type: string
         cdpUrl:
           anyOf:
             - type: string
@@ -5814,8 +6502,6 @@ components:
               const: 1
             - type: number
               const: 2
-        systemPrompt:
-          type: string
         selfHeal:
           type: boolean
         waitForCaptchaSolves:
@@ -5824,12 +6510,29 @@ components:
           type: boolean
         actTimeoutMs:
           type: number
+        llmId:
+          $ref: "#/components/schemas/LLMId"
+        actLlmId:
+          anyOf:
+            - $ref: "#/components/schemas/LLMId"
+            - type: "null"
+        observeLlmId:
+          anyOf:
+            - $ref: "#/components/schemas/LLMId"
+            - type: "null"
+        extractLlmId:
+          anyOf:
+            - $ref: "#/components/schemas/LLMId"
+            - type: "null"
       required:
         - id
         - env
         - status
-        - modelName
         - available
+        - llmId
+        - actLlmId
+        - observeLlmId
+        - extractLlmId
       additionalProperties: false
     BrowserSessionResultOutput:
       type: object
@@ -5838,6 +6541,619 @@ components:
           $ref: "#/components/schemas/BrowserSessionOutput"
       required:
         - browserSession
+      additionalProperties: false
+    ResultSelectorOutput:
+      type: object
+      properties:
+        xpath:
+          type: string
+        css:
+          type: string
+        text:
+          type: string
+        coordinates:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+          required:
+            - x
+            - y
+          additionalProperties: false
+      additionalProperties: false
+    PageClickParamsOutput:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        selector:
+          $ref: "#/components/schemas/Selector"
+        button:
+          $ref: "#/components/schemas/MouseButton"
+        clickCount:
+          type: integer
+          minimum: 1
+          maximum: 3
+        returnSelector:
+          default: false
+          type: boolean
+        method:
+          default: xy
+          type: string
+          enum:
+            - jsevent
+            - xy
+      required:
+        - selector
+        - method
+      additionalProperties: false
+    PageScrollByOffsetParamsOutput:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        cursorPosition:
+          $ref: "#/components/schemas/Selector"
+        offset:
+          type: object
+          properties:
+            x:
+              default: 0
+              type: number
+            y:
+              type: number
+          required:
+            - x
+            - y
+          additionalProperties: false
+      required:
+        - offset
+      additionalProperties: false
+    PageScrollByPagesParamsOutput:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        cursorPosition:
+          $ref: "#/components/schemas/Selector"
+        pages:
+          default: 1
+          type: number
+          minimum: -100
+          maximum: 100
+        delayBetweenMs:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+      required:
+        - pages
+      additionalProperties: false
+    PageScrollToTargetParamsOutput:
+      type: object
+      properties:
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        target:
+          $ref: "#/components/schemas/Selector"
+        position:
+          default: center
+          type: string
+          enum:
+            - center
+            - top
+            - bottom
+      required:
+        - target
+        - position
+      additionalProperties: false
+    PageScrollParamsOutput:
+      anyOf:
+        - $ref: "#/components/schemas/PageScrollByOffsetParamsOutput"
+        - $ref: "#/components/schemas/PageScrollByPagesParamsOutput"
+        - $ref: "#/components/schemas/PageScrollToTargetParamsOutput"
+    PageClickActionOutput:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: click
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageClickParamsOutput"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageClickResultOutput"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageHoverActionOutput:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: hover
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageHoverParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageHoverResultOutput"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageScrollActionOutput:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: scroll
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageScrollParamsOutput"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageScrollResult"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageDragAndDropActionOutput:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: dragAndDrop
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageDragAndDropParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageDragAndDropResultOutput"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageFillActionOutput:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: fill
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageFillParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageFillResultOutput"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageHighlightActionOutput:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: highlight
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageHighlightParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageHighlightResultOutput"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageSelectOptionActionOutput:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: selectOption
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageSelectOptionParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageSelectOptionResultOutput"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageSetInputFilesActionOutput:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: setInputFiles
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageSetInputFilesParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageSetInputFilesResultOutput"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageElementInfoActionOutput:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ActionId"
+        method:
+          type: string
+          const: elementInfo
+        status:
+          $ref: "#/components/schemas/PageActionStatus"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        pageId:
+          $ref: "#/components/schemas/PageId"
+        createdAt:
+          $ref: "#/components/schemas/Timestamp"
+        updatedAt:
+          $ref: "#/components/schemas/Timestamp"
+        completedAt:
+          $ref: "#/components/schemas/Timestamp"
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/PageError"
+            - type: "null"
+        params:
+          $ref: "#/components/schemas/PageElementInfoParams"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/PageElementInfoResultOutput"
+            - type: "null"
+      required:
+        - id
+        - method
+        - status
+        - sessionId
+        - createdAt
+        - updatedAt
+        - error
+        - params
+        - result
+      additionalProperties: false
+    PageActionOutput:
+      anyOf:
+        - $ref: "#/components/schemas/PageClickActionOutput"
+        - $ref: "#/components/schemas/PageHoverActionOutput"
+        - $ref: "#/components/schemas/PageScrollActionOutput"
+        - $ref: "#/components/schemas/PageDragAndDropActionOutput"
+        - $ref: "#/components/schemas/PageTypeAction"
+        - $ref: "#/components/schemas/PageKeyPressAction"
+        - $ref: "#/components/schemas/PageEnableCursorOverlayAction"
+        - $ref: "#/components/schemas/PageAddInitScriptAction"
+        - $ref: "#/components/schemas/PageGotoAction"
+        - $ref: "#/components/schemas/PageReloadAction"
+        - $ref: "#/components/schemas/PageGoBackAction"
+        - $ref: "#/components/schemas/PageGoForwardAction"
+        - $ref: "#/components/schemas/PageTargetIdAction"
+        - $ref: "#/components/schemas/PageMainFrameIdAction"
+        - $ref: "#/components/schemas/PageGetFullFrameTreeAction"
+        - $ref: "#/components/schemas/PageListAllFrameIdsAction"
+        - $ref: "#/components/schemas/PageTitleAction"
+        - $ref: "#/components/schemas/PageUrlAction"
+        - $ref: "#/components/schemas/PageScreenshotAction"
+        - $ref: "#/components/schemas/PageSnapshotAction"
+        - $ref: "#/components/schemas/PageFramesAction"
+        - $ref: "#/components/schemas/PageSetViewportSizeAction"
+        - $ref: "#/components/schemas/PageSetExtraHTTPHeadersAction"
+        - $ref: "#/components/schemas/PageWaitForLoadStateAction"
+        - $ref: "#/components/schemas/PageWaitForSelectorAction"
+        - $ref: "#/components/schemas/PageWaitForTimeoutAction"
+        - $ref: "#/components/schemas/PageEvaluateAction"
+        - $ref: "#/components/schemas/PageSendCDPAction"
+        - $ref: "#/components/schemas/PageCloseAction"
+        - $ref: "#/components/schemas/PageElementInfoActionOutput"
+        - $ref: "#/components/schemas/PageFillActionOutput"
+        - $ref: "#/components/schemas/PageHighlightActionOutput"
+        - $ref: "#/components/schemas/PageSelectOptionActionOutput"
+        - $ref: "#/components/schemas/PageSetInputFilesActionOutput"
+    PageFillResultOutput:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelectorOutput"
+        value:
+          type: string
+      required:
+        - selector
+        - value
+      additionalProperties: false
+    PageHighlightResultOutput:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelectorOutput"
+        highlighted:
+          type: boolean
+      required:
+        - selector
+        - highlighted
+      additionalProperties: false
+    PageSelectOptionResultOutput:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelectorOutput"
+        selected:
+          type: array
+          items:
+            type: string
+      required:
+        - selector
+        - selected
+      additionalProperties: false
+    PageSetInputFilesResultOutput:
+      type: object
+      properties:
+        selector:
+          $ref: "#/components/schemas/ResultSelectorOutput"
+        files:
+          type: array
+          items:
+            type: string
+      required:
+        - selector
+        - files
+      additionalProperties: false
+    PageElementInfoResultOutput:
+      type: object
+      properties:
+        count:
+          default: 0
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        selector:
+          default: {}
+          $ref: "#/components/schemas/ResultSelectorOutput"
+        tagName:
+          type: string
+        backendNodeId:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        visibility:
+          default:
+            isInViewport: false
+            isOccluded: false
+          $ref: "#/components/schemas/ElementInfoVisibility"
+        domRects:
+          default:
+            rects: []
+          $ref: "#/components/schemas/ElementInfoDomRects"
+        content:
+          default:
+            innerText: ""
+            textContent: ""
+            innerHTML: ""
+          $ref: "#/components/schemas/ElementInfoContent"
+        inputInfo:
+          $ref: "#/components/schemas/ElementInfoInputInfo"
+        ariaInfo:
+          $ref: "#/components/schemas/ElementInfoAriaInfo"
+        attributes:
+          $ref: "#/components/schemas/ElementInfoAttributes"
+        styles:
+          $ref: "#/components/schemas/ElementInfoStyles"
+      required:
+        - count
+        - selector
+        - tagName
+        - backendNodeId
+        - visibility
+        - domRects
+        - content
       additionalProperties: false
     BrowserSessionHeaders:
       $ref: "#/components/schemas/SessionHeadersOutput"
@@ -5848,6 +7164,18 @@ components:
           $ref: "#/components/schemas/BrowserSessionId"
       required:
         - id
+      additionalProperties: false
+    BrowserSessionErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: false
+        message:
+          type: string
+      required:
+        - success
+        - message
       additionalProperties: false
     BrowserSessionActionBase:
       type: object
@@ -6031,6 +7359,33 @@ components:
       required:
         - sessionId
       additionalProperties: false
+    LLMHeaders:
+      $ref: "#/components/schemas/SessionHeadersOutput"
+    LLMSource:
+      type: string
+      enum:
+        - user
+        - system-default
+    LLMProviderOptions:
+      type: object
+      properties:
+        temperature:
+          type: number
+        organization:
+          type: string
+        project:
+          type: string
+        location:
+          type: string
+      additionalProperties: false
+    LLMIdParams:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/LLMId"
+      required:
+        - id
+      additionalProperties: false
     ValidationErrorResponse:
       type: object
       properties:
@@ -6048,7 +7403,7 @@ components:
             - type: string
             - type: "null"
         action:
-          $ref: "#/components/schemas/PageAction"
+          $ref: "#/components/schemas/PageActionOutput"
       required:
         - success
         - error
@@ -6111,18 +7466,6 @@ components:
       required:
         - sessionId
       additionalProperties: false
-    PageMainFrameRequest:
-      type: object
-      properties:
-        id:
-          $ref: "#/components/schemas/RequestId"
-        sessionId:
-          $ref: "#/components/schemas/SessionId"
-        pageId:
-          $ref: "#/components/schemas/PageId"
-      required:
-        - sessionId
-      additionalProperties: false
     PageGetFullFrameTreeRequest:
       type: object
       properties:
@@ -6135,21 +7478,6 @@ components:
       required:
         - sessionId
       additionalProperties: false
-    PageAsProtocolFrameTreeRequest:
-      type: object
-      properties:
-        id:
-          $ref: "#/components/schemas/RequestId"
-        sessionId:
-          $ref: "#/components/schemas/SessionId"
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        rootMainFrameId:
-          $ref: "#/components/schemas/FrameId"
-      required:
-        - sessionId
-        - rootMainFrameId
-      additionalProperties: false
     PageListAllFrameIdsRequest:
       type: object
       properties:
@@ -6161,21 +7489,6 @@ components:
           $ref: "#/components/schemas/PageId"
       required:
         - sessionId
-      additionalProperties: false
-    PageGetOrdinalRequest:
-      type: object
-      properties:
-        id:
-          $ref: "#/components/schemas/RequestId"
-        sessionId:
-          $ref: "#/components/schemas/SessionId"
-        pageId:
-          $ref: "#/components/schemas/PageId"
-        frameId:
-          $ref: "#/components/schemas/FrameId"
-      required:
-        - sessionId
-        - frameId
       additionalProperties: false
     PageTitleRequest:
       type: object
@@ -6256,6 +7569,8 @@ paths:
     post:
       operationId: BrowserSessionCreate
       summary: Create a browser session
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6285,23 +7600,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BrowserSessionErrorResponse"
+                $ref: "#/components/schemas/BrowserSessionV4ErrorResponse"
         "401":
           description: Default Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BrowserSessionErrorResponse"
+                $ref: "#/components/schemas/BrowserSessionV4ErrorResponse"
         "500":
           description: Default Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BrowserSessionErrorResponse"
+                $ref: "#/components/schemas/BrowserSessionV4ErrorResponse"
   /v4/browsersession/{id}:
     get:
       operationId: BrowserSessionStatus
       summary: Get browser session status
+      tags:
+        - browserSession
       parameters:
         - schema:
             $ref: "#/components/schemas/BrowserSessionId"
@@ -6325,10 +7642,58 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BrowserSessionResponse"
+        "404":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrowserSessionV4ErrorResponse"
+    patch:
+      operationId: BrowserSessionUpdate
+      summary: Update a browser session
+      tags:
+        - browserSession
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BrowserSessionUpdateRequest"
+        required: true
+      parameters:
+        - schema:
+            $ref: "#/components/schemas/BrowserSessionId"
+          in: path
+          name: id
+          required: true
+        - schema:
+            description: Whether to stream the response via SSE
+            example: "true"
+            type: string
+            enum:
+              - "true"
+              - "false"
+          in: header
+          name: x-stream-response
+          description: Whether to stream the response via SSE
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrowserSessionResponse"
+        "404":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrowserSessionV4ErrorResponse"
   /v4/browsersession/{id}/end:
     post:
       operationId: BrowserSessionEnd
       summary: End a browser session
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6358,10 +7723,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BrowserSessionResponse"
+        "404":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrowserSessionV4ErrorResponse"
   /v4/browsersession/addInitScript:
     post:
       operationId: BrowserSessionAddInitScript
       summary: browserSession.addInitScript
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6426,6 +7799,8 @@ paths:
     post:
       operationId: BrowserSessionSetExtraHTTPHeaders
       summary: browserSession.setExtraHTTPHeaders
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6490,6 +7865,8 @@ paths:
     post:
       operationId: BrowserSessionPages
       summary: browserSession.pages
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6554,6 +7931,8 @@ paths:
     post:
       operationId: BrowserSessionActivePage
       summary: browserSession.activePage
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6618,6 +7997,8 @@ paths:
     post:
       operationId: BrowserSessionAwaitActivePage
       summary: browserSession.awaitActivePage
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6682,6 +8063,8 @@ paths:
     post:
       operationId: BrowserSessionResolvePageByMainFrameId
       summary: browserSession.resolvePageByMainFrameId
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6746,6 +8129,8 @@ paths:
     post:
       operationId: BrowserSessionGetFullFrameTreeByMainFrameId
       summary: browserSession.getFullFrameTreeByMainFrameId
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6810,6 +8195,8 @@ paths:
     post:
       operationId: BrowserSessionNewPage
       summary: browserSession.newPage
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6874,6 +8261,8 @@ paths:
     post:
       operationId: BrowserSessionCookies
       summary: browserSession.cookies
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -6938,6 +8327,8 @@ paths:
     post:
       operationId: BrowserSessionAddCookies
       summary: browserSession.addCookies
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -7002,6 +8393,8 @@ paths:
     post:
       operationId: BrowserSessionClearCookies
       summary: browserSession.clearCookies
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -7066,6 +8459,8 @@ paths:
     post:
       operationId: BrowserSessionConnectURL
       summary: browserSession.connectURL
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -7130,6 +8525,8 @@ paths:
     post:
       operationId: BrowserSessionConfiguredViewport
       summary: browserSession.configuredViewport
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -7194,6 +8591,8 @@ paths:
     post:
       operationId: BrowserSessionBrowserbaseSessionID
       summary: browserSession.browserbaseSessionID
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -7258,6 +8657,8 @@ paths:
     post:
       operationId: BrowserSessionBrowserbaseSessionURL
       summary: browserSession.browserbaseSessionURL
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -7322,6 +8723,8 @@ paths:
     post:
       operationId: BrowserSessionBrowserbaseDebugURL
       summary: browserSession.browserbaseDebugURL
+      tags:
+        - browserSession
       requestBody:
         content:
           application/json:
@@ -7386,6 +8789,8 @@ paths:
     get:
       operationId: BrowserSessionActionList
       summary: browserSession.actions
+      tags:
+        - browserSession
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"
@@ -7471,6 +8876,8 @@ paths:
     get:
       operationId: BrowserSessionActionDetails
       summary: browserSession.action
+      tags:
+        - browserSession
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"
@@ -7539,10 +8946,170 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BrowserSessionV4ErrorResponse"
+  /v4/llms:
+    get:
+      operationId: LLMList
+      summary: List llms
+      tags:
+        - llm
+      parameters:
+        - schema:
+            description: Whether to stream the response via SSE
+            example: "true"
+            type: string
+            enum:
+              - "true"
+              - "false"
+          in: header
+          name: x-stream-response
+          description: Whether to stream the response via SSE
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMListResponse"
+    post:
+      operationId: LLMCreate
+      summary: Create an llm
+      tags:
+        - llm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LLMCreateRequest"
+        required: true
+      parameters:
+        - schema:
+            description: Whether to stream the response via SSE
+            example: "true"
+            type: string
+            enum:
+              - "true"
+              - "false"
+          in: header
+          name: x-stream-response
+          description: Whether to stream the response via SSE
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMResponse"
+        "400":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMErrorResponse"
+        "401":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMErrorResponse"
+        "500":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMErrorResponse"
+  /v4/llms/{id}:
+    get:
+      operationId: LLMRetrieve
+      summary: Get an llm
+      tags:
+        - llm
+      parameters:
+        - schema:
+            $ref: "#/components/schemas/LLMId"
+          in: path
+          name: id
+          required: true
+        - schema:
+            description: Whether to stream the response via SSE
+            example: "true"
+            type: string
+            enum:
+              - "true"
+              - "false"
+          in: header
+          name: x-stream-response
+          description: Whether to stream the response via SSE
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMResponse"
+        "400":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMErrorResponse"
+        "401":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMErrorResponse"
+        "404":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMErrorResponse"
+        "500":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMErrorResponse"
+    patch:
+      operationId: LLMUpdate
+      summary: Update an llm
+      tags:
+        - llm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LLMUpdateRequest"
+        required: true
+      parameters:
+        - schema:
+            $ref: "#/components/schemas/LLMId"
+          in: path
+          name: id
+          required: true
+        - schema:
+            description: Whether to stream the response via SSE
+            example: "true"
+            type: string
+            enum:
+              - "true"
+              - "false"
+          in: header
+          name: x-stream-response
+          description: Whether to stream the response via SSE
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMResponse"
   /v4/page/click:
     post:
       operationId: PageClick
       summary: page.click
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -7607,6 +9174,8 @@ paths:
     post:
       operationId: PageHover
       summary: page.hover
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -7671,6 +9240,8 @@ paths:
     post:
       operationId: PageScroll
       summary: page.scroll
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -7735,6 +9306,8 @@ paths:
     post:
       operationId: PageDragAndDrop
       summary: page.dragAndDrop
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -7799,6 +9372,8 @@ paths:
     post:
       operationId: PageType
       summary: page.type
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -7863,6 +9438,8 @@ paths:
     post:
       operationId: PageKeyPress
       summary: page.keyPress
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -7927,6 +9504,8 @@ paths:
     post:
       operationId: PageGoto
       summary: page.goto
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -7991,6 +9570,8 @@ paths:
     post:
       operationId: PageReload
       summary: page.reload
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -8055,6 +9636,8 @@ paths:
     post:
       operationId: PageGoBack
       summary: page.goBack
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -8119,6 +9702,8 @@ paths:
     post:
       operationId: PageGoForward
       summary: page.goForward
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -8183,6 +9768,8 @@ paths:
     post:
       operationId: PageClose
       summary: page.close
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -8243,10 +9830,342 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/V4ErrorResponse"
+  /v4/page/elementInfo:
+    post:
+      operationId: PageElementInfo
+      summary: page.elementInfo
+      tags:
+        - page
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PageElementInfoRequest"
+        required: true
+      parameters:
+        - schema:
+            description: Whether to stream the response via SSE
+            example: "true"
+            type: string
+            enum:
+              - "true"
+              - "false"
+          in: header
+          name: x-stream-response
+          description: Whether to stream the response via SSE
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageElementInfoResponse"
+        "400":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "401":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "404":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "408":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "422":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "500":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+  /v4/page/fill:
+    post:
+      operationId: PageFill
+      summary: page.fill
+      tags:
+        - page
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PageFillRequest"
+        required: true
+      parameters:
+        - schema:
+            description: Whether to stream the response via SSE
+            example: "true"
+            type: string
+            enum:
+              - "true"
+              - "false"
+          in: header
+          name: x-stream-response
+          description: Whether to stream the response via SSE
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageFillResponse"
+        "400":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "401":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "404":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "408":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "422":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "500":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+  /v4/page/highlight:
+    post:
+      operationId: PageHighlight
+      summary: page.highlight
+      tags:
+        - page
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PageHighlightRequest"
+        required: true
+      parameters:
+        - schema:
+            description: Whether to stream the response via SSE
+            example: "true"
+            type: string
+            enum:
+              - "true"
+              - "false"
+          in: header
+          name: x-stream-response
+          description: Whether to stream the response via SSE
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageHighlightResponse"
+        "400":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "401":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "404":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "408":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "422":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "500":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+  /v4/page/selectOption:
+    post:
+      operationId: PageSelectOption
+      summary: page.selectOption
+      tags:
+        - page
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PageSelectOptionRequest"
+        required: true
+      parameters:
+        - schema:
+            description: Whether to stream the response via SSE
+            example: "true"
+            type: string
+            enum:
+              - "true"
+              - "false"
+          in: header
+          name: x-stream-response
+          description: Whether to stream the response via SSE
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageSelectOptionResponse"
+        "400":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "401":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "404":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "408":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "422":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "500":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+  /v4/page/setInputFiles:
+    post:
+      operationId: PageSetInputFiles
+      summary: page.setInputFiles
+      tags:
+        - page
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PageSetInputFilesRequest"
+        required: true
+      parameters:
+        - schema:
+            description: Whether to stream the response via SSE
+            example: "true"
+            type: string
+            enum:
+              - "true"
+              - "false"
+          in: header
+          name: x-stream-response
+          description: Whether to stream the response via SSE
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageSetInputFilesResponse"
+        "400":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "401":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "404":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "408":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "422":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
+        "500":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V4ErrorResponse"
   /v4/page/enableCursorOverlay:
     post:
       operationId: PageEnableCursorOverlay
       summary: page.enableCursorOverlay
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -8311,6 +10230,8 @@ paths:
     post:
       operationId: PageAddInitScript
       summary: page.addInitScript
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -8375,6 +10296,8 @@ paths:
     get:
       operationId: PageTargetId
       summary: page.targetId
+      tags:
+        - page
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"
@@ -8446,6 +10369,8 @@ paths:
     get:
       operationId: PageMainFrameId
       summary: page.mainFrameId
+      tags:
+        - page
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"
@@ -8513,81 +10438,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/V4ErrorResponse"
-  /v4/page/mainFrame:
-    get:
-      operationId: PageMainFrame
-      summary: page.mainFrame
-      parameters:
-        - schema:
-            $ref: "#/components/schemas/RequestId"
-          in: query
-          name: id
-        - schema:
-            $ref: "#/components/schemas/SessionId"
-          in: query
-          name: sessionId
-          required: true
-        - schema:
-            $ref: "#/components/schemas/PageId"
-          in: query
-          name: pageId
-        - schema:
-            description: Whether to stream the response via SSE
-            example: "true"
-            type: string
-            enum:
-              - "true"
-              - "false"
-          in: header
-          name: x-stream-response
-          description: Whether to stream the response via SSE
-      responses:
-        "200":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PageMainFrameResponse"
-        "400":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "401":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "404":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "408":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "422":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "500":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
   /v4/page/getFullFrameTree:
     get:
       operationId: PageGetFullFrameTree
       summary: page.getFullFrameTree
+      tags:
+        - page
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"
@@ -8655,86 +10511,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/V4ErrorResponse"
-  /v4/page/asProtocolFrameTree:
-    get:
-      operationId: PageAsProtocolFrameTree
-      summary: page.asProtocolFrameTree
-      parameters:
-        - schema:
-            $ref: "#/components/schemas/RequestId"
-          in: query
-          name: id
-        - schema:
-            $ref: "#/components/schemas/SessionId"
-          in: query
-          name: sessionId
-          required: true
-        - schema:
-            $ref: "#/components/schemas/PageId"
-          in: query
-          name: pageId
-        - schema:
-            $ref: "#/components/schemas/FrameId"
-          in: query
-          name: rootMainFrameId
-          required: true
-        - schema:
-            description: Whether to stream the response via SSE
-            example: "true"
-            type: string
-            enum:
-              - "true"
-              - "false"
-          in: header
-          name: x-stream-response
-          description: Whether to stream the response via SSE
-      responses:
-        "200":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PageAsProtocolFrameTreeResponse"
-        "400":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "401":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "404":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "408":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "422":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "500":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
   /v4/page/listAllFrameIds:
     get:
       operationId: PageListAllFrameIds
       summary: page.listAllFrameIds
+      tags:
+        - page
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"
@@ -8802,86 +10584,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/V4ErrorResponse"
-  /v4/page/getOrdinal:
-    get:
-      operationId: PageGetOrdinal
-      summary: page.getOrdinal
-      parameters:
-        - schema:
-            $ref: "#/components/schemas/RequestId"
-          in: query
-          name: id
-        - schema:
-            $ref: "#/components/schemas/SessionId"
-          in: query
-          name: sessionId
-          required: true
-        - schema:
-            $ref: "#/components/schemas/PageId"
-          in: query
-          name: pageId
-        - schema:
-            $ref: "#/components/schemas/FrameId"
-          in: query
-          name: frameId
-          required: true
-        - schema:
-            description: Whether to stream the response via SSE
-            example: "true"
-            type: string
-            enum:
-              - "true"
-              - "false"
-          in: header
-          name: x-stream-response
-          description: Whether to stream the response via SSE
-      responses:
-        "200":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PageGetOrdinalResponse"
-        "400":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "401":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "404":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "408":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "422":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "500":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
   /v4/page/title:
     get:
       operationId: PageTitle
       summary: page.title
+      tags:
+        - page
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"
@@ -8953,6 +10661,8 @@ paths:
     get:
       operationId: PageUrl
       summary: page.url
+      tags:
+        - page
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"
@@ -9024,6 +10734,8 @@ paths:
     get:
       operationId: PageFrames
       summary: page.frames
+      tags:
+        - page
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"
@@ -9095,6 +10807,8 @@ paths:
     post:
       operationId: PageSetExtraHTTPHeaders
       summary: page.setExtraHTTPHeaders
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -9155,74 +10869,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/V4ErrorResponse"
-  /v4/page/waitForMainLoadState:
-    post:
-      operationId: PageWaitForMainLoadState
-      summary: page.waitForMainLoadState
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PageWaitForMainLoadStateRequest"
-        required: true
-      parameters:
-        - schema:
-            description: Whether to stream the response via SSE
-            example: "true"
-            type: string
-            enum:
-              - "true"
-              - "false"
-          in: header
-          name: x-stream-response
-          description: Whether to stream the response via SSE
-      responses:
-        "200":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PageWaitForMainLoadStateResponse"
-        "400":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "401":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "404":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "408":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "422":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
-        "500":
-          description: Default Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/V4ErrorResponse"
   /v4/page/screenshot:
     post:
       operationId: PageScreenshot
       summary: page.screenshot
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -9287,6 +10939,8 @@ paths:
     post:
       operationId: PageSnapshot
       summary: page.snapshot
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -9351,6 +11005,8 @@ paths:
     post:
       operationId: PageSetViewportSize
       summary: page.setViewportSize
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -9415,6 +11071,8 @@ paths:
     post:
       operationId: PageWaitForLoadState
       summary: page.waitForLoadState
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -9479,6 +11137,8 @@ paths:
     post:
       operationId: PageWaitForSelector
       summary: page.waitForSelector
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -9543,6 +11203,8 @@ paths:
     post:
       operationId: PageWaitForTimeout
       summary: page.waitForTimeout
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -9607,6 +11269,8 @@ paths:
     post:
       operationId: PageEvaluate
       summary: page.evaluate
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -9671,6 +11335,8 @@ paths:
     post:
       operationId: PageSendCDP
       summary: page.sendCDP
+      tags:
+        - page
       requestBody:
         content:
           application/json:
@@ -9735,6 +11401,8 @@ paths:
     get:
       operationId: PageActionList
       summary: page.action
+      tags:
+        - page
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"
@@ -9820,6 +11488,8 @@ paths:
     get:
       operationId: PageActionDetails
       summary: page.actionById
+      tags:
+        - page
       parameters:
         - schema:
             $ref: "#/components/schemas/RequestId"

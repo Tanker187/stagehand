@@ -6,7 +6,7 @@ import {
   PageHoverActionSchema,
   PageHoverRequestSchema,
   PageHoverResponseSchema,
-  PageXPathResultSchema,
+  PageHoverResultSchema,
 } from "../../../schemas/v4/page.js";
 import { createPageActionHandler, pageErrorResponses } from "./shared.js";
 
@@ -26,11 +26,8 @@ const hoverRoute: RouteOptions = {
   handler: createPageActionHandler({
     method: "hover",
     actionSchema: PageHoverActionSchema,
-    execute: async ({ params }) => {
-      return PageXPathResultSchema.parse({
-        xpath:
-          "selector" in params ? params.selector.xpath : "xpath=//stub-hover",
-      });
+    execute: async () => {
+      return PageHoverResultSchema.parse({ selector: {} });
     },
   }),
 };

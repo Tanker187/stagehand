@@ -6,7 +6,7 @@ import {
   PageScrollActionSchema,
   PageScrollRequestSchema,
   PageScrollResponseSchema,
-  PageXPathResultSchema,
+  PageScrollResultSchema,
 } from "../../../schemas/v4/page.js";
 import { createPageActionHandler, pageErrorResponses } from "./shared.js";
 
@@ -26,11 +26,8 @@ const scrollRoute: RouteOptions = {
   handler: createPageActionHandler({
     method: "scroll",
     actionSchema: PageScrollActionSchema,
-    execute: async ({ params }) => {
-      return PageXPathResultSchema.parse({
-        xpath:
-          "selector" in params ? params.selector.xpath : "xpath=//stub-scroll",
-      });
+    execute: async () => {
+      return PageScrollResultSchema.parse({ x: 0, y: 0 });
     },
   }),
 };

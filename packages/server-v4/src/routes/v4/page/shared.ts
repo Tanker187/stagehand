@@ -37,15 +37,6 @@ type PageActionHandlerContext<TAction extends PageAction> = {
   sessionId: string;
 };
 
-// Selector stays wrapped in an object even though we only consume xpath today,
-// because we may add more optional locator fields later without changing the
-// v4 request shape.
-function normalizeXPath(xpath: string): string {
-  return xpath.startsWith("xpath=") || xpath.startsWith("/")
-    ? xpath
-    : `xpath=${xpath}`;
-}
-
 export function getPageId(params: unknown): string | undefined {
   if (
     typeof params === "object" &&
@@ -191,5 +182,3 @@ export const pageActionListHandler: RouteHandlerMethod = async (
     ] as PageAction[],
   });
 };
-
-export { normalizeXPath };

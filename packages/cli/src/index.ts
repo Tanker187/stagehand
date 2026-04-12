@@ -8,7 +8,7 @@
  * Multiple sessions can run simultaneously using --session <name> or BROWSE_SESSION env var.
  */
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { Stagehand, type Page as BrowsePage } from "@browserbasehq/stagehand";
 import { promises as fs } from "fs";
 import * as path from "path";
@@ -17,7 +17,19 @@ import * as net from "net";
 import { spawn } from "child_process";
 import * as readline from "readline";
 import type { Protocol } from "devtools-protocol";
+import WebSocket from "ws";
 import { version as VERSION } from "../package.json";
+import {
+  DEFAULT_LOCAL_CONFIG,
+  getLocalModeHint,
+  type LocalBrowserLaunchOptions,
+  type LocalCdpDiscovery,
+  type LocalConfig,
+  type LocalInfo,
+  resolveLocalStrategy,
+} from "./local-strategy";
+import { resolveWsTarget } from "./resolve-ws";
+import { NodeHtmlMarkdown } from "node-html-markdown";
 
 const program = new Command();
 
@@ -155,6 +167,80 @@ function getContextPath(session: string): string {
   return path.join(SOCKET_DIR, `browse-${session}.context`);
 }
 
+function getConnectPath(session: string): string {
+  return path.join(SOCKET_DIR, `browse-${session}.connect`);
+}
+
+function getLocalConfigPath(session: string): string {
+  return path.join(SOCKET_DIR, `browse-${session}.local-config`);
+}
+
+function getLocalInfoPath(session: string): string {
+  return path.join(SOCKET_DIR, `browse-${session}.local-info`);
+}
+
+function getSessionParamsPath(session: string): string {
+  return path.join(SOCKET_DIR, `browse-${session}.session-params`);
+}
+
+// ==================== LOCAL STRATEGY CONFIG ====================
+
+async function readLocalConfig(session: string): Promise<LocalConfig> {
+  try {
+    const raw = await fs.readFile(getLocalConfigPath(session), "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return { ...DEFAULT_LOCAL_CONFIG };
+  }
+}
+
+async function writeLocalConfig(
+  session: string,
+  config: LocalConfig,
+): Promise<void> {
+  await fs.writeFile(getLocalConfigPath(session), JSON.stringify(config));
+}
+
+async function writeLocalInfo(session: string, info: LocalInfo): Promise<void> {
+  await fs.writeFile(getLocalInfoPath(session), JSON.stringify(info));
+}
+
+async function readLocalInfo(session: string): Promise<LocalInfo | null> {
+  try {
+    const raw = await fs.readFile(getLocalInfoPath(session), "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function waitForLocalInfo(
+  session: string,
+  timeoutMs: number = 1500,
+): Promise<LocalInfo | null> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    const localInfo = await readLocalInfo(session);
+    if (localInfo) {
+      return localInfo;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  return readLocalInfo(session);
+}
+
+function logLocalModeHint(
+  localConfig: LocalConfig,
+  localInfo?: LocalInfo | null,
+): void {
+  const hint = getLocalModeHint(localConfig, localInfo);
+  if (hint) {
+    console.error(hint);
+  }
+}
+
 type BrowseMode = "browserbase" | "local";
 
 function hasBrowserbaseCredentials(): boolean {
@@ -196,6 +282,238 @@ async function getDesiredMode(session: string): Promise<BrowseMode> {
   return hasBrowserbaseCredentials() ? "browserbase" : "local";
 }
 
+// ==================== CDP AUTO-DISCOVERY ====================
+
+/**
+ * Well-known Chrome user-data directories per platform.
+ * Each may contain a DevToolsActivePort file when Chrome is running with
+ * remote debugging enabled.
+ */
+function getChromeUserDataDirs(): string[] {
+  const home = os.homedir();
+  const dirs: string[] = [];
+
+  if (process.platform === "darwin") {
+    const base = path.join(home, "Library", "Application Support");
+    for (const name of [
+      "Google/Chrome",
+      "Google/Chrome Canary",
+      "Chromium",
+      "BraveSoftware/Brave-Browser",
+    ]) {
+      dirs.push(path.join(base, name));
+    }
+  } else if (process.platform === "linux") {
+    const config = path.join(home, ".config");
+    for (const name of [
+      "google-chrome",
+      "google-chrome-unstable",
+      "chromium",
+      "BraveSoftware/Brave-Browser",
+    ]) {
+      dirs.push(path.join(config, name));
+    }
+  }
+
+  return dirs;
+}
+
+/**
+ * Read DevToolsActivePort file from a Chrome user-data directory.
+ * Returns { port, wsPath } or null if file doesn't exist or is malformed.
+ */
+async function readDevToolsActivePort(
+  userDataDir: string,
+): Promise<{ port: number; wsPath: string } | null> {
+  try {
+    const content = await fs.readFile(
+      path.join(userDataDir, "DevToolsActivePort"),
+      "utf-8",
+    );
+    const lines = content.trim().split("\n");
+    const port = parseInt(lines[0]?.trim(), 10);
+    if (isNaN(port) || port <= 0 || port > 65535) return null;
+    const wsPath = lines[1]?.trim() || "/devtools/browser";
+    return { port, wsPath };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a TCP port is reachable on localhost with a short timeout.
+ */
+function isPortReachable(port: number, timeoutMs = 500): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = net.createConnection({ host: "127.0.0.1", port });
+    const timer = setTimeout(() => {
+      sock.destroy();
+      resolve(false);
+    }, timeoutMs);
+    sock.on("connect", () => {
+      clearTimeout(timer);
+      sock.destroy();
+      resolve(true);
+    });
+    sock.on("error", () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Probe a CDP endpoint at the given port.
+ * Tries /json/version first, then falls back to a direct WebSocket handshake
+ * (needed for Chrome 136+ with UI-based remote debugging).
+ * Returns the webSocketDebuggerUrl on success, or null.
+ */
+async function probeCdpEndpoint(port: number): Promise<string | null> {
+  // Try /json/version (standard path)
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch(`http://127.0.0.1:${port}/json/version`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      const json = (await res.json()) as { webSocketDebuggerUrl?: string };
+      if (json.webSocketDebuggerUrl) {
+        return json.webSocketDebuggerUrl;
+      }
+    }
+  } catch {
+    // /json/version unavailable
+  }
+
+  // Fallback: direct WebSocket at /devtools/browser
+  // Chrome 136+ with chrome://inspect may only expose WS, not HTTP endpoints
+  const wsUrl = `ws://127.0.0.1:${port}/devtools/browser`;
+  try {
+    const verified = await verifyCdpWebSocket(wsUrl);
+    if (verified) return wsUrl;
+  } catch {
+    // WS fallback also failed
+  }
+
+  return null;
+}
+
+/**
+ * Verify a WebSocket URL is a valid CDP endpoint by attempting an HTTP upgrade.
+ * Sends a minimal WebSocket handshake and checks for a 101 Switching Protocols response.
+ */
+function verifyCdpWebSocket(wsUrl: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const url = new URL(wsUrl);
+    const port = parseInt(url.port) || 80;
+    const wsKey = Buffer.from(
+      Array.from({ length: 16 }, () => Math.floor(Math.random() * 256)),
+    ).toString("base64");
+
+    const sock = net.createConnection({ host: url.hostname, port });
+    let response = "";
+
+    const timer = setTimeout(() => {
+      sock.destroy();
+      resolve(false);
+    }, 2000);
+
+    sock.on("connect", () => {
+      // Send a WebSocket upgrade request
+      sock.write(
+        `GET ${url.pathname} HTTP/1.1\r\n` +
+          `Host: ${url.hostname}:${port}\r\n` +
+          `Upgrade: websocket\r\n` +
+          `Connection: Upgrade\r\n` +
+          `Sec-WebSocket-Key: ${wsKey}\r\n` +
+          `Sec-WebSocket-Version: 13\r\n` +
+          `\r\n`,
+      );
+    });
+
+    sock.on("data", (data) => {
+      response += data.toString();
+      // Check for successful WebSocket upgrade (101 Switching Protocols)
+      if (/^HTTP\/1\.[01] 101(?:\s|$)/.test(response)) {
+        clearTimeout(timer);
+        sock.destroy();
+        resolve(true);
+      } else if (response.includes("\r\n\r\n")) {
+        // Got a complete HTTP response that isn't 101
+        clearTimeout(timer);
+        sock.destroy();
+        resolve(false);
+      }
+    });
+
+    sock.on("error", () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+  });
+}
+
+interface CdpCandidate {
+  wsUrl: string;
+  source: string; // e.g. "DevToolsActivePort (Google Chrome)" or "port 9222"
+}
+
+/**
+ * Discover locally-running Chrome instances with CDP debugging enabled.
+ * Returns the discovered CDP WebSocket URL, or null with a reason.
+ *
+ * Discovery order:
+ * 1. DevToolsActivePort files in well-known Chrome user-data dirs
+ * 2. Common debugging ports (9222, 9229)
+ *
+ * If multiple healthy candidates are found, returns null (ambiguity).
+ */
+async function discoverLocalCdp(): Promise<LocalCdpDiscovery | null> {
+  const candidates: CdpCandidate[] = [];
+
+  // Phase 1: Scan DevToolsActivePort files
+  const userDataDirs = getChromeUserDataDirs();
+  for (const dir of userDataDirs) {
+    const info = await readDevToolsActivePort(dir);
+    if (!info) continue;
+
+    // Verify port is alive
+    if (!(await isPortReachable(info.port))) {
+      // Stale file — clean up
+      try {
+        await fs.unlink(path.join(dir, "DevToolsActivePort"));
+      } catch {}
+      continue;
+    }
+
+    const wsUrl = await probeCdpEndpoint(info.port);
+    if (wsUrl) {
+      const name = path.basename(dir);
+      candidates.push({ wsUrl, source: `DevToolsActivePort (${name})` });
+    }
+  }
+
+  // Phase 2: Probe common ports (only if DevToolsActivePort yielded nothing)
+  if (candidates.length === 0) {
+    for (const port of [9222, 9229]) {
+      if (!(await isPortReachable(port))) continue;
+      const wsUrl = await probeCdpEndpoint(port);
+      if (wsUrl) {
+        candidates.push({ wsUrl, source: `port ${port}` });
+      }
+    }
+  }
+
+  // Ambiguity check
+  if (candidates.length > 1) {
+    return null; // Caller should fall back to isolated and report ambiguity
+  }
+
+  return candidates[0] ?? null;
+}
+
 async function isDaemonRunning(session: string): Promise<boolean> {
   try {
     const pidFile = getPidPath(session);
@@ -221,13 +539,17 @@ const DAEMON_STATE_FILES = (session: string) => [
   getChromePidPath(session),
   getLockPath(session),
   getModePath(session),
+  getLocalInfoPath(session),
 ];
 
 async function cleanupStaleFiles(session: string): Promise<void> {
   const files = [
     ...DAEMON_STATE_FILES(session),
-    // Context is client-written config, only cleaned on full shutdown
+    // Client-written config, only cleaned on full shutdown
     getContextPath(session),
+    getConnectPath(session),
+    getLocalConfigPath(session),
+    getSessionParamsPath(session),
   ];
 
   for (const file of files) {
@@ -339,6 +661,39 @@ async function runDaemon(session: string, headless: boolean): Promise<void> {
         contextConfig = JSON.parse(raw);
       } catch {}
 
+      // Read connect config if present (written by `browse --connect <id>`)
+      let connectSessionId: string | null = null;
+      try {
+        connectSessionId = (
+          await fs.readFile(getConnectPath(session), "utf-8")
+        ).trim();
+      } catch {}
+
+      // Read session params if present (written by --proxies, --advanced-stealth, etc.)
+      let sessionParams: Record<string, unknown> = {};
+      try {
+        const raw = await fs.readFile(getSessionParamsPath(session), "utf-8");
+        sessionParams = JSON.parse(raw);
+      } catch {
+        // No session params file
+      }
+
+      // Resolve local browser launch options based on strategy
+      let localLaunchOptions: LocalBrowserLaunchOptions | undefined;
+      let localInfo: LocalInfo | undefined;
+
+      if (!useBrowserbase) {
+        const resolvedLocalStrategy = await resolveLocalStrategy({
+          localConfig: await readLocalConfig(session),
+          headless,
+          defaultViewport: DEFAULT_VIEWPORT,
+          discoverLocalCdp,
+          resolveWsTarget,
+        });
+        localLaunchOptions = resolvedLocalStrategy.localLaunchOptions;
+        localInfo = resolvedLocalStrategy.localInfo;
+      }
+
       stagehand = new Stagehand({
         env: useBrowserbase ? "BROWSERBASE" : "LOCAL",
         verbose: 0,
@@ -346,30 +701,58 @@ async function runDaemon(session: string, headless: boolean): Promise<void> {
         ...(useBrowserbase
           ? {
               disableAPI: true,
-              ...(contextConfig
+              ...(connectSessionId
                 ? {
-                    browserbaseSessionCreateParams: {
-                      browserSettings: {
-                        context: contextConfig,
-                      },
-                    },
+                    browserbaseSessionID: connectSessionId,
+                    keepAlive: true,
+                  }
+                : {}),
+              ...(!connectSessionId
+                ? {
+                    browserbaseSessionCreateParams: (() => {
+                      const sessionBrowserSettings =
+                        (sessionParams.browserSettings as Record<
+                          string,
+                          unknown
+                        >) || {};
+                      const { browserSettings: _, ...sessionParamsWithoutBS } =
+                        sessionParams;
+                      void _;
+                      return {
+                        userMetadata: { browse_cli: "true" },
+                        ...sessionParamsWithoutBS,
+                        browserSettings: {
+                          ...sessionBrowserSettings,
+                          ...(contextConfig ? { context: contextConfig } : {}),
+                        },
+                      };
+                    })(),
                   }
                 : {}),
             }
           : {
-              localBrowserLaunchOptions: {
-                headless,
-                viewport: DEFAULT_VIEWPORT,
-              },
+              localBrowserLaunchOptions: localLaunchOptions,
             }),
       });
 
-      // Persist mode so status command can report it
+      // Persist mode and local info so status command can report it
       await fs.writeFile(getModePath(session), desiredMode);
+      if (localInfo) {
+        await writeLocalInfo(session, localInfo);
+      }
 
       await stagehand.init();
 
       context = stagehand.context;
+
+      // Clear cached state when the browser connection dies so the next
+      // command triggers a full re-initialization instead of reusing a
+      // dead Stagehand/context pair (fixes "awaitActivePage: no page
+      // available" when a stale daemon outlives its browser).
+      context.conn.onTransportClosed(() => {
+        stagehand = null;
+        context = null;
+      });
 
       // Try to save Chrome info for reference (best effort)
       try {
@@ -440,7 +823,8 @@ async function runDaemon(session: string, headless: boolean): Promise<void> {
       }
     } catch {}
 
-    await cleanupStaleFiles(session);
+    // Only clean daemon state, not client-written config (local-config, context, mode-override)
+    await cleanupDaemonStateFiles(session);
     process.exit(0);
   };
 
@@ -815,6 +1199,13 @@ async function executeCommand(
       await stagehand.act(action);
       return { selected: values };
     }
+    case "upload": {
+      const [selector, filePaths] = args as [string, string[]];
+      const resolved = resolveSelector(selector);
+      const files = filePaths.length === 1 ? filePaths[0] : filePaths;
+      await page!.deepLocator(resolved).setInputFiles(files);
+      return { uploaded: true, files: filePaths };
+    }
     case "highlight": {
       const [selector, duration] = args as [string, number?];
       await page!
@@ -866,6 +1257,11 @@ async function executeCommand(
               .deepLocator(resolveSelector(selector!))
               .isChecked(),
           };
+        case "markdown": {
+          const target = selector ? resolveSelector(selector) : "body";
+          const html = await page!.deepLocator(target).innerHtml();
+          return { markdown: NodeHtmlMarkdown.translate(html) };
+        }
         default:
           throw new Error(`Unknown get type: ${what}`);
       }
@@ -1341,7 +1737,8 @@ async function stopDaemonAndCleanup(session: string): Promise<void> {
     // Daemon may already be down.
   }
   await new Promise((r) => setTimeout(r, 500));
-  await cleanupStaleFiles(session);
+  // Only clean daemon state files, not client-written config (local-config, context, mode-override)
+  await cleanupDaemonStateFiles(session);
 }
 
 async function ensureDaemon(session: string, headless: boolean): Promise<void> {
@@ -1436,6 +1833,15 @@ interface GlobalOpts {
   headed?: boolean;
   json?: boolean;
   session?: string;
+  connect?: string;
+  // Session creation flags (remote only)
+  proxies?: boolean;
+  advancedStealth?: boolean;
+  solveCaptchas?: boolean;
+  region?: string;
+  keepAlive?: boolean;
+  sessionTimeout?: number;
+  blockAds?: boolean;
 }
 
 function getSession(opts: GlobalOpts): string {
@@ -1444,6 +1850,31 @@ function getSession(opts: GlobalOpts): string {
 
 function isHeadless(opts: GlobalOpts): boolean {
   return opts.headless === true && opts.headed !== true;
+}
+
+function buildSessionParamsFromOpts(
+  opts: GlobalOpts,
+): Record<string, unknown> | null {
+  const params: Record<string, unknown> = {};
+  const browserSettings: Record<string, unknown> = {};
+
+  if (opts.proxies) params.proxies = true;
+  if (opts.region) params.region = opts.region;
+  if (opts.keepAlive) params.keepAlive = true;
+  if (opts.sessionTimeout !== undefined) params.timeout = opts.sessionTimeout;
+
+  if (opts.advancedStealth) browserSettings.advancedStealth = true;
+  if (opts.blockAds) browserSettings.blockAds = true;
+  if (opts.solveCaptchas !== undefined) {
+    browserSettings.solveCaptchas = opts.solveCaptchas;
+  }
+
+  if (Object.keys(browserSettings).length > 0) {
+    params.browserSettings = browserSettings;
+  }
+
+  if (Object.keys(params).length === 0) return null;
+  return params;
 }
 
 function output(data: unknown, json: boolean): void {
@@ -1462,12 +1893,13 @@ async function runCommand(command: string, args: unknown[]): Promise<unknown> {
   const headless = isHeadless(opts);
   // If --ws provided, bypass daemon and connect directly
   if (opts.ws) {
+    const cdpUrl = await resolveWsTarget(opts.ws);
     const stagehand = new Stagehand({
       env: "LOCAL",
       verbose: 0,
       disablePino: true,
       localBrowserLaunchOptions: {
-        cdpUrl: opts.ws,
+        cdpUrl,
       },
     });
     await stagehand.init();
@@ -1475,6 +1907,66 @@ async function runCommand(command: string, args: unknown[]): Promise<unknown> {
       return await executeCommand(stagehand.context, command, args);
     } finally {
       await stagehand.close();
+    }
+  }
+
+  // Handle --connect flag: write session ID for daemon to read
+  if (opts.connect) {
+    const desiredMode = await getDesiredMode(session);
+    if (desiredMode === "local") {
+      throw new Error(
+        "--connect is only supported in remote mode. Run `browse env remote` first.",
+      );
+    }
+
+    if (await isDaemonRunning(session)) {
+      let currentConnect: string | null = null;
+      try {
+        currentConnect = (
+          await fs.readFile(getConnectPath(session), "utf-8")
+        ).trim();
+      } catch {}
+      if (currentConnect !== opts.connect) {
+        await stopDaemonAndCleanup(session);
+      }
+    }
+
+    await fs.writeFile(getConnectPath(session), opts.connect);
+  } else {
+    try {
+      await fs.unlink(getConnectPath(session));
+    } catch {}
+  }
+
+  // Handle session params flags (--proxies, --advanced-stealth, etc.)
+  const sessionParams = buildSessionParamsFromOpts(opts);
+  if (sessionParams) {
+    const desiredMode = await getDesiredMode(session);
+    if (desiredMode !== "browserbase") {
+      console.error(
+        JSON.stringify({
+          error:
+            "Session flags (--proxies, --advanced-stealth, etc.) are only supported in remote mode. Run 'browse env remote' first.",
+        }),
+      );
+      process.exit(1);
+    }
+
+    const paramsPath = getSessionParamsPath(session);
+    const newParamsJson = JSON.stringify(sessionParams);
+
+    let currentParamsJson = "";
+    try {
+      currentParamsJson = await fs.readFile(paramsPath, "utf-8");
+    } catch {}
+
+    await fs.writeFile(paramsPath, newParamsJson);
+
+    if (
+      currentParamsJson !== newParamsJson &&
+      (await isDaemonRunning(session))
+    ) {
+      await stopDaemonAndCleanup(session);
     }
   }
 
@@ -1487,8 +1979,8 @@ program
   .description("Browser automation CLI for AI agents")
   .version(VERSION)
   .option(
-    "--ws <url>",
-    "CDP WebSocket URL (bypasses daemon, direct connection)",
+    "--ws <url|port>",
+    "CDP WebSocket URL or port number (bypasses daemon, direct connection)",
   )
   .option("--headless", "Run Chrome in headless mode")
   .option("--headed", "Run Chrome with visible window (default)")
@@ -1496,6 +1988,31 @@ program
   .option(
     "--session <name>",
     "Session name for multiple browsers (or use BROWSE_SESSION env var)",
+  )
+  .option(
+    "--connect <session-id>",
+    "Connect to an existing Browserbase session by ID",
+  )
+  .option("--proxies", "Enable Browserbase proxy (remote only)")
+  .option("--advanced-stealth", "Enable advanced stealth mode (remote only)")
+  .option("--solve-captchas", "Enable automatic CAPTCHA solving (remote only)")
+  .option(
+    "--no-solve-captchas",
+    "Disable automatic CAPTCHA solving (remote only)",
+  )
+  .option("--block-ads", "Enable ad blocking (remote only)")
+  .option(
+    "--region <region>",
+    "Session region: us-west-2, us-east-1, eu-central-1, ap-southeast-1 (remote only)",
+  )
+  .option(
+    "--keep-alive",
+    "Keep session alive after disconnection (remote only)",
+  )
+  .option(
+    "--session-timeout <seconds>",
+    "Session timeout in seconds (remote only)",
+    parseInt,
   );
 
 // ==================== DAEMON COMMANDS ====================
@@ -1548,25 +2065,87 @@ program
     const running = await isDaemonRunning(session);
     let wsUrl = null;
     let mode: BrowseMode | null = null;
+    let browserbaseSessionId: string | null = null;
+    let localDetails: Record<string, unknown> = {};
     if (running) {
       try {
         wsUrl = await fs.readFile(getWsPath(session), "utf-8");
       } catch {}
       mode = await readCurrentMode(session);
+      try {
+        browserbaseSessionId = (
+          await fs.readFile(getConnectPath(session), "utf-8")
+        ).trim();
+      } catch {}
+      if (mode === "local") {
+        const localConfig = await readLocalConfig(session);
+        const localInfo =
+          (await readLocalInfo(session)) ?? (await waitForLocalInfo(session));
+        logLocalModeHint(localConfig, localInfo);
+        localDetails = {
+          localStrategy: localConfig.strategy,
+          ...(localInfo ?? {}),
+        };
+      }
     }
-    console.log(JSON.stringify({ running, session, wsUrl, mode }));
+    let sessionParams: Record<string, unknown> | null = null;
+    try {
+      const raw = await fs.readFile(getSessionParamsPath(session), "utf-8");
+      sessionParams = JSON.parse(raw);
+    } catch {}
+    console.log(
+      JSON.stringify({
+        running,
+        session,
+        wsUrl,
+        mode,
+        browserbaseSessionId,
+        ...localDetails,
+        ...(sessionParams ? { sessionParams } : {}),
+      }),
+    );
   });
 
-program
-  .command("env [target]")
-  .description("Show or switch browser environment (local | remote)")
-  .action(async (target?: string) => {
+const envUsage =
+  "Usage: browse env [local|remote]\n" +
+  "  browse env local [--auto-connect|<port|url>]";
+
+const envCommand = program
+  .command("env [target] [cdpTarget]")
+  .description(
+    "Show or switch browser environment (local | remote)\n\n" +
+      "  browse env                    Show current environment\n" +
+      "  browse env local              Use clean isolated local browser (default)\n" +
+      "  browse env local --auto-connect  Auto-discover local Chrome, fallback to isolated\n" +
+      "  browse env local <port|url>   Attach to specific CDP target\n" +
+      "  browse env remote             Use Browserbase (requires API key)",
+  )
+  .option(
+    "--auto-connect",
+    "Auto-discover an existing local Chrome instance via CDP",
+  );
+
+envCommand.addOption(
+  new Option(
+    "--isolated",
+    "Deprecated alias for the default isolated local browser",
+  ).hideHelp(),
+);
+
+envCommand.action(
+  async (
+    target: string | undefined,
+    cdpTarget: string | undefined,
+    cmdOpts: { autoConnect?: boolean; isolated?: boolean },
+  ) => {
     const opts = program.opts<GlobalOpts>();
     const session = getSession(opts);
 
     if (!target) {
       let mode: string | null = null;
       const desiredMode = await getDesiredMode(session);
+      const localConfig = await readLocalConfig(session);
+      const localInfo = await readLocalInfo(session);
       if (await isDaemonRunning(session)) {
         mode = toModeTarget((await readCurrentMode(session)) ?? desiredMode);
       }
@@ -1575,6 +2154,12 @@ program
           mode: mode ?? "not running",
           desired: toModeTarget(desiredMode),
           session,
+          ...(desiredMode === "local"
+            ? {
+                localStrategy: localConfig.strategy,
+                ...(localInfo ?? {}),
+              }
+            : {}),
         }),
       );
       return;
@@ -1586,7 +2171,7 @@ program
     };
     const mapped = modeMap[target];
     if (!mapped) {
-      console.error("Usage: browse env [local|remote]");
+      console.error(envUsage);
       process.exit(1);
     }
 
@@ -1597,11 +2182,40 @@ program
       process.exit(1);
     }
 
+    let localConfig: LocalConfig = { ...DEFAULT_LOCAL_CONFIG };
+    if (mapped === "local") {
+      const selectedLocalStrategies = [
+        Boolean(cmdOpts.autoConnect),
+        Boolean(cmdOpts.isolated),
+        Boolean(cdpTarget),
+      ].filter(Boolean);
+
+      if (selectedLocalStrategies.length > 1) {
+        console.error(envUsage);
+        console.error(
+          "Use only one of --auto-connect, --isolated, or <port|url>.",
+        );
+        process.exit(1);
+      }
+
+      if (cmdOpts.autoConnect) {
+        localConfig = { strategy: "auto" };
+      } else if (cdpTarget) {
+        localConfig = { strategy: "cdp", cdpTarget };
+      }
+
+      await writeLocalConfig(session, localConfig);
+    }
+
     await fs.writeFile(getModeOverridePath(session), mapped);
 
+    // Always restart daemon when switching env to pick up new local config
     if (await isDaemonRunning(session)) {
       const currentMode = (await readCurrentMode(session)) ?? "local";
-      if (currentMode === mapped) {
+      const needsRestart = currentMode !== mapped || mapped === "local"; // local always restarts to pick up strategy change
+      if (!needsRestart) {
+        // needsRestart is false only when currentMode === mapped && mapped !== "local"
+        // (local always restarts to pick up strategy changes)
         console.log(
           JSON.stringify({
             mode: toModeTarget(mapped),
@@ -1616,14 +2230,20 @@ program
 
     await ensureDaemon(session, isHeadless(opts));
 
+    if (mapped === "local") {
+      logLocalModeHint(localConfig, await waitForLocalInfo(session));
+    }
+
     console.log(
       JSON.stringify({
         mode: toModeTarget(mapped),
         session,
         restarted: true,
+        ...(mapped === "local" ? { localStrategy: localConfig.strategy } : {}),
       }),
     );
-  });
+  },
+);
 
 program
   .command("refs")
@@ -1680,6 +2300,12 @@ program
       const session = getSession(opts);
 
       if (cmdOpts.contextId) {
+        if (opts.connect) {
+          console.error(
+            "Error: --context-id cannot be used with --connect (the session already exists)",
+          );
+          process.exit(1);
+        }
         // Contexts only work with Browserbase remote sessions
         const desiredMode = await getDesiredMode(session);
         if (desiredMode === "local") {
@@ -1969,6 +2595,20 @@ program
   });
 
 program
+  .command("upload <selector> <files...>")
+  .description('Upload file(s) to an <input type="file"> element')
+  .action(async (selector: string, files: string[]) => {
+    const opts = program.opts<GlobalOpts>();
+    try {
+      const result = await runCommand("upload", [selector, files]);
+      output(result, opts.json ?? false);
+    } catch (e) {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    }
+  });
+
+program
   .command("highlight <selector>")
   .description("Highlight element")
   .option("-d, --duration <ms>", "Duration", "2000")
@@ -1991,7 +2631,7 @@ program
 program
   .command("get <what> [selector]")
   .description(
-    "Get page info: url, title, text, html, value, box, visible, checked",
+    "Get page info: url, title, text, html, markdown, value, box, visible, checked",
   )
   .action(async (what: string, selector?: string) => {
     const opts = program.opts<GlobalOpts>();
@@ -2281,6 +2921,261 @@ networkCmd
       process.exit(1);
     }
   });
+
+// ==================== CDP TAILING ====================
+
+interface CDPMessage {
+  id?: number;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: { code: number; message: string };
+  sessionId?: string;
+}
+
+const CDP_DEFAULT_DOMAINS = ["Network", "Console", "Runtime", "Log", "Page"];
+
+program
+  .command("cdp <url|port>")
+  .description(
+    "Attach to a CDP target and stream DevTools protocol events as NDJSON.\n" +
+      "Accepts a WebSocket URL (ws://...) or a bare port number (e.g. 9222).\n" +
+      "Output is one JSON object per line, suitable for piping to files or jq.",
+  )
+  .option(
+    "--domain <domains...>",
+    `CDP domains to enable (repeatable). Default: ${CDP_DEFAULT_DOMAINS.join(",")}`,
+  )
+  .option("--pretty", "Human-readable output instead of JSON")
+  .action(
+    async (
+      target: string,
+      cmdOpts: { domain?: string[]; pretty?: boolean },
+    ) => {
+      const wsUrl = await resolveWsTarget(target);
+      const domains = cmdOpts.domain ?? CDP_DEFAULT_DOMAINS;
+      const usePretty = cmdOpts.pretty ?? process.stdout.isTTY ?? false;
+
+      let messageId = 1;
+      const pendingIds = new Set<number>();
+      const targetSessionMap = new Map<string, string>();
+
+      function sendCDP(
+        ws: WebSocket,
+        method: string,
+        params: Record<string, unknown> = {},
+        sessionId?: string,
+      ): number {
+        const id = messageId++;
+        pendingIds.add(id);
+        const msg: Record<string, unknown> = { id, method, params };
+        if (sessionId) msg.sessionId = sessionId;
+        ws.send(JSON.stringify(msg));
+        return id;
+      }
+
+      function enableDomainsForSession(ws: WebSocket, sessionId: string): void {
+        for (const domain of domains) {
+          if (domain === "Network") {
+            sendCDP(
+              ws,
+              "Network.enable",
+              { maxTotalBufferSize: 1000000, maxResourceBufferSize: 100000 },
+              sessionId,
+            );
+          } else {
+            sendCDP(ws, `${domain}.enable`, {}, sessionId);
+          }
+        }
+      }
+
+      function writeEvent(message: CDPMessage): void {
+        try {
+          process.stdout.write(JSON.stringify(message) + "\n");
+        } catch (err: unknown) {
+          if ((err as NodeJS.ErrnoException).code === "EPIPE") process.exit(0);
+          throw err;
+        }
+      }
+
+      function writePrettyEvent(message: CDPMessage): void {
+        if (!message.method) return;
+        const params = message.params as Record<string, unknown> | undefined;
+        let line = `[${message.method}]`;
+
+        try {
+          switch (message.method) {
+            case "Network.requestWillBeSent": {
+              const req = params?.request as
+                | { method?: string; url?: string }
+                | undefined;
+              if (req) line += ` ${req.method ?? "?"} ${req.url ?? ""}`;
+              break;
+            }
+            case "Network.responseReceived": {
+              const resp = params?.response as
+                | { status?: number; url?: string }
+                | undefined;
+              if (resp) line += ` ${resp.status ?? "?"} ${resp.url ?? ""}`;
+              break;
+            }
+            case "Network.loadingFailed": {
+              const errorText =
+                (params?.errorText as string) ??
+                (params?.canceled ? "Canceled" : "Unknown");
+              line += ` ${errorText}`;
+              break;
+            }
+            case "Runtime.consoleAPICalled": {
+              const type = (params?.type as string) ?? "log";
+              const args =
+                (params?.args as Array<{
+                  value?: unknown;
+                  description?: string;
+                }>) ?? [];
+              const text = args
+                .map((a) => a.description ?? a.value ?? "")
+                .join(" ");
+              line += ` [${type}] ${text}`;
+              break;
+            }
+            case "Runtime.exceptionThrown": {
+              const detail = params?.exceptionDetails as
+                | {
+                    text?: string;
+                    exception?: { description?: string };
+                  }
+                | undefined;
+              line += ` ${detail?.exception?.description ?? detail?.text ?? "Unknown exception"}`;
+              break;
+            }
+            case "Page.frameNavigated": {
+              const url = (params?.frame as { url?: string })?.url ?? "";
+              if (url) line += ` ${url}`;
+              break;
+            }
+            case "Target.attachedToTarget": {
+              const info = params?.targetInfo as
+                | { type?: string; url?: string }
+                | undefined;
+              if (info) line += ` [${info.type ?? "?"}] ${info.url ?? ""}`;
+              break;
+            }
+            default:
+              break;
+          }
+        } catch {
+          // Formatting failed — use method name only
+        }
+
+        try {
+          process.stdout.write(line + "\n");
+        } catch (err: unknown) {
+          if ((err as NodeJS.ErrnoException).code === "EPIPE") process.exit(0);
+          throw err;
+        }
+      }
+
+      const emit = usePretty ? writePrettyEvent : writeEvent;
+
+      await new Promise<void>((resolve) => {
+        const ws = new WebSocket(wsUrl);
+        let closed = false;
+
+        function cleanup(): void {
+          if (closed) return;
+          closed = true;
+          if (
+            ws.readyState === WebSocket.OPEN ||
+            ws.readyState === WebSocket.CONNECTING
+          ) {
+            ws.close();
+          }
+          resolve();
+        }
+
+        process.on("SIGINT", cleanup);
+        process.on("SIGTERM", cleanup);
+
+        ws.on("open", () => {
+          if (usePretty) {
+            process.stderr.write(`Connected to ${wsUrl}\n`);
+          }
+
+          // Auto-attach to page targets
+          sendCDP(ws, "Target.setAutoAttach", {
+            autoAttach: true,
+            flatten: true,
+            waitForDebuggerOnStart: false,
+            filter: [{ type: "page" }],
+          });
+
+          sendCDP(ws, "Target.setDiscoverTargets", {
+            discover: true,
+            filter: [{ type: "page" }],
+          });
+        });
+
+        ws.on("message", (raw: WebSocket.RawData) => {
+          let data: CDPMessage;
+          try {
+            data = JSON.parse(raw.toString()) as CDPMessage;
+          } catch {
+            return;
+          }
+
+          // Filter out responses to our own commands
+          if (data.id !== undefined && pendingIds.has(data.id)) {
+            pendingIds.delete(data.id);
+            if (data.error) {
+              process.stderr.write(
+                `CDP error (id=${data.id}): ${data.error.message}\n`,
+              );
+            }
+            return;
+          }
+
+          // Track page targets and enable domains
+          if (data.method === "Target.attachedToTarget" && data.params) {
+            const p = data.params as {
+              sessionId: string;
+              targetInfo: { targetId: string; type: string };
+            };
+            if (p.targetInfo?.type === "page") {
+              targetSessionMap.set(p.targetInfo.targetId, p.sessionId);
+              enableDomainsForSession(ws, p.sessionId);
+            }
+          }
+
+          if (data.method === "Target.detachedFromTarget" && data.params) {
+            const p = data.params as {
+              sessionId: string;
+              targetId?: string;
+            };
+            const targetId =
+              p.targetId ??
+              [...targetSessionMap.entries()].find(
+                ([, sid]) => sid === p.sessionId,
+              )?.[0];
+            if (targetId) targetSessionMap.delete(targetId);
+          }
+
+          emit(data);
+        });
+
+        ws.on("error", (err: Error) => {
+          process.stderr.write(`Error: ${err.message}\n`);
+        });
+
+        ws.on("close", () => {
+          if (!closed && usePretty) {
+            process.stderr.write("Disconnected.\n");
+          }
+          cleanup();
+        });
+      });
+    },
+  );
 
 // ==================== RUN ====================
 

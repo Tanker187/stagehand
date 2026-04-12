@@ -15,13 +15,21 @@ import type { LanguageModelV2 } from "@ai-sdk/provider";
 import { ChatCompletion } from "openai/resources";
 import { v7 as uuidv7 } from "uuid";
 import { LogLine } from "../types/public/logs.js";
-import { AvailableModel } from "../types/public/model.js";
+import { AvailableModel, ClientOptions } from "../types/public/model.js";
 import { CreateChatCompletionOptions, LLMClient } from "./LLMClient.js";
 import {
   FlowLogger,
   extractLlmPromptSummary,
 } from "../flowlogger/FlowLogger.js";
 import { toJsonSchema } from "../zodCompat.js";
+
+type ProviderOptionValue = string | number | boolean | null;
+type ProviderOptionMap = Record<string, ProviderOptionValue>;
+
+function inferProviderName(modelId: string): string | undefined {
+  const [providerName] = modelId.split("/");
+  return providerName || undefined;
+}
 
 export class AISdkClient extends LLMClient {
   public type = "aisdk" as const;
@@ -31,13 +39,18 @@ export class AISdkClient extends LLMClient {
   constructor({
     model,
     logger,
+    clientOptions,
   }: {
     model: LanguageModelV2;
     logger?: (message: LogLine) => void;
+    clientOptions?: ClientOptions;
   }) {
     super(model.modelId as AvailableModel);
     this.model = model;
     this.logger = logger;
+    if (clientOptions) {
+      this.clientOptions = clientOptions;
+    }
   }
 
   public getLanguageModel(): LanguageModelV2 {
@@ -134,13 +147,16 @@ export class AISdkClient extends LLMClient {
     let objectResponse: Awaited<ReturnType<typeof generateObject>>;
     const isGPT5 = this.model.modelId.includes("gpt-5");
     const isCodex = this.model.modelId.includes("codex");
-    const usesLowReasoningEffort =
-      (this.model.modelId.includes("gpt-5.1") ||
-        this.model.modelId.includes("gpt-5.2")) &&
-      !isCodex;
     // Kimi models only support temperature=1
     const isKimi = this.model.modelId.includes("kimi");
     const temperature = isKimi ? 1 : options.temperature;
+
+    // Resolve reasoning effort: user-configured > default "none" for GPT-5.x sub-models
+    const isGPT5SubModel = this.model.modelId.includes("gpt-5.") && !isCodex;
+    const userReasoningEffort = this.clientOptions?.reasoningEffort;
+    const resolvedReasoningEffort =
+      userReasoningEffort ?? (isGPT5SubModel ? "none" : undefined);
+    const providerName = inferProviderName(this.model.modelId);
 
     // Models that lack native structured-output support need a prompt-based
     // JSON fallback instead of response_format: { type: "json_schema" }.
@@ -148,6 +164,55 @@ export class AISdkClient extends LLMClient {
     const needsPromptJsonFallback = PROMPT_JSON_FALLBACK_PATTERNS.some((p) =>
       this.model.modelId.includes(p),
     );
+
+    const providerOptions: Record<string, ProviderOptionMap> = {};
+    switch (providerName) {
+      case "openai":
+        providerOptions.openai = {
+          strictJsonSchema: true,
+          ...(isGPT5 ? { textVerbosity: isCodex ? "medium" : "low" } : {}),
+          ...(resolvedReasoningEffort
+            ? { reasoningEffort: resolvedReasoningEffort }
+            : {}),
+        };
+        break;
+      case "azure":
+        providerOptions.azure = {
+          strictJsonSchema: true,
+        };
+        break;
+      case "google":
+        providerOptions.google = {
+          structuredOutputs: true,
+        };
+        break;
+      case "vertex":
+        providerOptions.vertex = {
+          structuredOutputs: true,
+        };
+        break;
+      case "anthropic":
+        providerOptions.anthropic = {
+          structuredOutputMode: "auto",
+        };
+        break;
+      case "groq":
+        providerOptions.groq = {
+          structuredOutputs: true,
+        };
+        break;
+      case "cerebras":
+        providerOptions.cerebras = {
+          strictJsonSchema: true,
+        };
+        break;
+      case "mistral":
+        providerOptions.mistral = {
+          structuredOutputs: true,
+          strictJsonSchema: true,
+        };
+        break;
+    }
 
     if (options.response_model) {
       // Log LLM request for generateObject (extract)
@@ -180,18 +245,9 @@ You must respond in JSON format. respond WITH JSON. Do not include any other tex
           messages: formattedMessages,
           schema: options.response_model.schema,
           temperature,
-          providerOptions: isGPT5
-            ? {
-                openai: {
-                  textVerbosity: isCodex ? "medium" : "low", // codex models only support 'medium'
-                  reasoningEffort: isCodex
-                    ? "medium"
-                    : usesLowReasoningEffort
-                      ? "low"
-                      : "minimal",
-                },
-              }
-            : undefined,
+          ...(Object.keys(providerOptions).length > 0
+            ? { providerOptions }
+            : {}),
         });
       } catch (err) {
         // Log error response to maintain request/response pairing

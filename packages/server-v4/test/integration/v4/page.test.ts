@@ -315,12 +315,19 @@ describe("v4 page routes", { concurrency: false }, () => {
     assertSuccessAction(hoverCtx, "hover");
 
     const scrollCtx = await postPageRoute("scroll", sessionId, {
-      selector: {
+      cursorPosition: {
         xpath: "//div[@id='scroll-box']",
       },
-      percentage: 100,
+      pages: 1,
     });
     assertSuccessAction(scrollCtx, "scroll");
+
+    const elementInfoCtx = await postPageRoute("elementInfo", sessionId, {
+      selector: {
+        xpath: "//main[@id='message']",
+      },
+    });
+    assertSuccessAction(elementInfoCtx, "elementInfo");
 
     const dragCtx = await postPageRoute("dragAndDrop", sessionId, {
       from: {
@@ -707,17 +714,6 @@ describe("v4 page routes", { concurrency: false }, () => {
         .mainFrameId;
       assert.equal(mainFrameId, await getMainFrameId(temp.cdpUrl));
 
-      const mainFrameCtx = await getPageRoute("mainFrame", temp.sessionId, {});
-      const mainFrameAction = assertSuccessAction(mainFrameCtx, "mainFrame");
-      assert.equal(
-        (
-          mainFrameAction.result as {
-            frame: { frameId: string };
-          }
-        ).frame.frameId,
-        mainFrameId,
-      );
-
       const framesCtx = await getPageRoute("frames", temp.sessionId, {});
       const framesAction = assertSuccessAction(framesCtx, "frames");
       const frames = (
@@ -745,24 +741,6 @@ describe("v4 page routes", { concurrency: false }, () => {
         mainFrameId,
       );
 
-      const protocolFrameTreeCtx = await getPageRoute(
-        "asProtocolFrameTree",
-        temp.sessionId,
-        { rootMainFrameId: mainFrameId },
-      );
-      const protocolFrameTreeAction = assertSuccessAction(
-        protocolFrameTreeCtx,
-        "asProtocolFrameTree",
-      );
-      assert.equal(
-        (
-          protocolFrameTreeAction.result as {
-            frameTree: { frame: { id: string } };
-          }
-        ).frameTree.frame.id,
-        mainFrameId,
-      );
-
       const listAllFrameIdsCtx = await getPageRoute(
         "listAllFrameIds",
         temp.sessionId,
@@ -779,26 +757,6 @@ describe("v4 page routes", { concurrency: false }, () => {
         [...frameIds].sort(),
         [...frames.map((frame) => frame.frameId)].sort(),
       );
-
-      const getOrdinalCtx = await getPageRoute("getOrdinal", temp.sessionId, {
-        frameId: mainFrameId,
-      });
-      const getOrdinalAction = assertSuccessAction(getOrdinalCtx, "getOrdinal");
-      assert.equal(
-        (getOrdinalAction.result as { frameId: string }).frameId,
-        mainFrameId,
-      );
-      assert.ok((getOrdinalAction.result as { ordinal: number }).ordinal >= 0);
-
-      const waitForMainLoadStateCtx = await postPageRoute(
-        "waitForMainLoadState",
-        temp.sessionId,
-        {
-          state: "load",
-          timeoutMs: 15_000,
-        },
-      );
-      assertSuccessAction(waitForMainLoadStateCtx, "waitForMainLoadState");
 
       const evaluateCtx = await postPageRoute("evaluate", temp.sessionId, {
         expression: `({
@@ -928,6 +886,64 @@ describe("v4 page routes", { concurrency: false }, () => {
     } finally {
       await endSession(temp.sessionId, headers);
     }
+  });
+
+  it("POST /v4/page/click accepts css, text, and coordinate selector types", async () => {
+    const gotoCtx = await postPageRoute("goto", sessionId, {
+      url: CLICK_TEST_URL,
+      waitUntil: "load",
+    });
+    assertSuccessAction(gotoCtx, "goto");
+
+    const cssSelectorCtx = await postPageRoute("click", sessionId, {
+      selector: { css: "#click-target" },
+    });
+    assertSuccessAction(cssSelectorCtx, "click");
+
+    const cssWithIndexCtx = await postPageRoute("click", sessionId, {
+      selector: { css: "button", idx: 0 },
+    });
+    assertSuccessAction(cssWithIndexCtx, "click");
+
+    const xpathWithIndexCtx = await postPageRoute("click", sessionId, {
+      selector: { xpath: "//button", idx: 0 },
+    });
+    assertSuccessAction(xpathWithIndexCtx, "click");
+
+    const textWithIndexCtx = await postPageRoute("click", sessionId, {
+      selector: { text: "Submit", idx: 0 },
+    });
+    assertSuccessAction(textWithIndexCtx, "click");
+
+    const textSelectorCtx = await postPageRoute("click", sessionId, {
+      selector: { text: "Submit" },
+    });
+    assertSuccessAction(textSelectorCtx, "click");
+
+    const coordSelectorCtx = await postPageRoute("click", sessionId, {
+      selector: { x: 100, y: 200 },
+    });
+    assertSuccessAction(coordSelectorCtx, "click");
+
+    const jseventCtx = await postPageRoute("click", sessionId, {
+      selector: { css: "#click-target" },
+      method: "jsevent",
+    });
+    assertSuccessAction(jseventCtx, "click");
+  });
+
+  it("POST /v4/page/dragAndDrop accepts mixed selector types (xpath from, coordinates to)", async () => {
+    const gotoCtx = await postPageRoute("goto", sessionId, {
+      url: METHODS_TEST_URL,
+      waitUntil: "load",
+    });
+    assertSuccessAction(gotoCtx, "goto");
+
+    const dragCtx = await postPageRoute("dragAndDrop", sessionId, {
+      from: { xpath: "//div[@id='drag-source']" },
+      to: { x: 200, y: 300 },
+    });
+    assertSuccessAction(dragCtx, "dragAndDrop");
   });
 
   it("POST /v4/page/click returns the new top-level failure shape for validation errors", async () => {
