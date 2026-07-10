@@ -15,6 +15,7 @@ import {
 import { LogLine } from "./logs.js";
 import { ClientOptions } from "./model.js";
 import { StagehandZodObject } from "../../zodCompat.js";
+import type { AgentEvidenceCallback } from "./agentEvidenceEvents.js";
 
 // Re-export ModelMessage for consumers who want to use it for conversation continuation
 export type { ModelMessage } from "ai";
@@ -25,6 +26,16 @@ import { Page as PlaywrightPage } from "playwright-core";
 import { Page as PuppeteerPage } from "puppeteer-core";
 import { Page as PatchrightPage } from "patchright-core";
 import { Page } from "../../understudy/page.js";
+
+/**
+ * Result of a screenshot provider: the base64-encoded image bytes plus an
+ * explicit media type. Declaring the media type at the capture boundary lets
+ * every CUA client pass it through instead of hardcoding or inferring it.
+ */
+export interface ScreenshotProviderResult {
+  base64: string;
+  mediaType: "image/png" | "image/jpeg";
+}
 
 // =============================================================================
 // Variable Types
@@ -136,6 +147,11 @@ export interface AgentCallbacks {
   onStepFinish?:
     | GenerateTextOnStepFinishCallback<ToolSet>
     | StreamTextOnStepFinishCallback<ToolSet>;
+  /**
+   * Callback called when Stagehand captures agent-run evidence such as
+   * screenshots, completed tool/action steps, or post-action observations.
+   */
+  onEvidence?: AgentEvidenceCallback;
 }
 
 /**
@@ -377,9 +393,8 @@ export interface AgentExecuteOptionsBase {
    *
    * Accepts both simple values and rich objects with descriptions (same type as `act`).
    *
-   * **Note:** Not supported in CUA mode (`mode: "cua"`). Requires `experimental: true`.
+   * **Note:** Not supported in CUA mode (`mode: "cua"`).
    *
-   * @experimental
    * @example
    * ```typescript
    * // Simple values
@@ -446,19 +461,28 @@ export type AgentType =
   | "anthropic"
   | "google"
   | "microsoft"
-  | "bedrock";
+  | "bedrock"
+  | "vertex"
+  | "azure";
 
 export const AVAILABLE_CUA_MODELS = [
+  "openai/gpt-5.4",
+  "openai/gpt-5.4-mini",
+  "openai/gpt-5.5",
   "openai/computer-use-preview",
   "openai/computer-use-preview-2025-03-11",
   "anthropic/claude-opus-4-5-20251101",
   "anthropic/claude-opus-4-6",
+  "anthropic/claude-opus-4-8",
   "anthropic/claude-sonnet-4-6",
+  "anthropic/claude-haiku-4-5",
   "anthropic/claude-haiku-4-5-20251001",
   "anthropic/claude-sonnet-4-20250514",
   "anthropic/claude-sonnet-4-5-20250929",
+  "anthropic/claude-fable-5",
   "google/gemini-2.5-computer-use-preview-10-2025",
   "google/gemini-3-flash-preview",
+  "google/gemini-3.5-flash",
   "google/gemini-3-pro-preview",
   "microsoft/fara-7b",
 ] as const;
@@ -577,10 +601,14 @@ export interface ResponseItem {
 export interface ComputerCallItem extends ResponseItem {
   type: "computer_call";
   call_id: string;
-  action: {
+  action?: {
     type: string;
     [key: string]: unknown;
   };
+  actions?: Array<{
+    type: string;
+    [key: string]: unknown;
+  }>;
   pending_safety_checks?: Array<{
     id: string;
     code: string;
@@ -602,8 +630,9 @@ export type ResponseInputItem =
       call_id: string;
       output:
         | {
-            type: "input_image";
+            type: "input_image" | "computer_screenshot";
             image_url: string;
+            detail?: "original" | "high" | "low";
             current_url?: string;
             error?: string;
             [key: string]: unknown;

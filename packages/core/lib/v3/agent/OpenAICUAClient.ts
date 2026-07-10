@@ -16,6 +16,7 @@ import {
   FunctionCallItem,
   SafetyCheck,
   SafetyConfirmationHandler,
+  ScreenshotProviderResult,
 } from "../types/public/agent.js";
 import { ClientOptions } from "../types/public/model.js";
 import { AgentClient } from "./AgentClient.js";
@@ -49,12 +50,16 @@ export class OpenAICUAClient extends AgentClient {
   public lastResponseId?: string;
   private currentViewport = { width: 1288, height: 711 };
   private currentUrl?: string;
-  private screenshotProvider?: () => Promise<string>;
+  private screenshotProvider?: () => Promise<ScreenshotProviderResult>;
   private actionHandler?: (action: AgentAction) => Promise<void>;
   private reasoningItems: Map<string, ResponseItem> = new Map();
   private environment: string = "browser"; // "browser", "mac", "windows", or "ubuntu"
   private tools?: ToolSet;
   private safetyConfirmationHandler?: SafetyConfirmationHandler;
+
+  private get usesNewComputerTool(): boolean {
+    return this.modelName.startsWith("gpt-5");
+  }
 
   constructor(
     type: AgentType,
@@ -103,7 +108,9 @@ export class OpenAICUAClient extends AgentClient {
     this.currentUrl = url;
   }
 
-  setScreenshotProvider(provider: () => Promise<string>): void {
+  setScreenshotProvider(
+    provider: () => Promise<ScreenshotProviderResult>,
+  ): void {
     this.screenshotProvider = provider;
   }
 
@@ -293,15 +300,15 @@ export class OpenAICUAClient extends AgentClient {
         if (item.type === "computer_call" && this.isComputerCallItem(item)) {
           logger({
             category: "agent",
-            message: `Found computer_call: ${item.action.type}, payload: ${JSON.stringify(item.action)}, call_id: ${item.call_id}`,
+            message: `Found computer_call with call_id: ${item.call_id}`,
             level: 2,
           });
-          const action = this.convertComputerCallToAction(item);
-          if (action) {
+          const actions = this.convertComputerCallToActions(item);
+          for (const action of actions) {
             stepActions.push(action);
             logger({
               category: "agent",
-              message: `Converted computer_call to action: ${action.type}`,
+              message: `Found computer_call action: ${action.type}, payload: ${JSON.stringify(action)}, call_id: ${item.call_id}`,
               level: 2,
             });
           }
@@ -385,8 +392,8 @@ export class OpenAICUAClient extends AgentClient {
     return (
       item.type === "computer_call" &&
       "call_id" in item &&
-      "action" in item &&
-      typeof item.action === "object"
+      (("action" in item && typeof item.action === "object") ||
+        ("actions" in item && Array.isArray(item.actions)))
     );
   }
 
@@ -463,7 +470,7 @@ export class OpenAICUAClient extends AgentClient {
     if (initialScreenshot) {
       const screenshotInput: ResponseInputImage = {
         type: "input_image",
-        image_url: initialScreenshot,
+        image_url: this.toDataUrl(initialScreenshot),
         detail: "high",
       };
       userContent.push(screenshotInput);
@@ -487,19 +494,21 @@ export class OpenAICUAClient extends AgentClient {
     usage: Record<string, number>;
   }> {
     try {
-      // Create the request parameters
-      const requestParams: Record<string, unknown> = {
-        model: this.modelName,
-        tools: [
-          {
-            type: "computer_use_preview",
+      // Create the request parameters, branching on tool format
+      const computerTool = this.usesNewComputerTool
+        ? { type: "computer" as const }
+        : {
+            type: "computer_use_preview" as const,
             display_width: this.currentViewport.width,
             display_height: this.currentViewport.height,
             environment: this.environment,
-          },
-        ],
+          };
+
+      const requestParams: Record<string, unknown> = {
+        model: this.modelName,
+        tools: [computerTool],
         input: inputItems,
-        truncation: "auto",
+        ...(this.usesNewComputerTool ? {} : { truncation: "auto" }),
       };
 
       // Add custom tools if available
@@ -601,29 +610,38 @@ export class OpenAICUAClient extends AgentClient {
     // Process each output item
     for (const item of output) {
       if (item.type === "computer_call" && this.isComputerCallItem(item)) {
-        // Handle computer calls
+        // Handle computer calls (both single-action and batched-actions formats)
         try {
-          const action = this.convertComputerCallToAction(item);
+          const actions = this.convertComputerCallToActions(item);
 
-          if (action && this.actionHandler) {
-            logger({
-              category: "agent",
-              message: `Executing computer action: ${action.type}`,
-              level: 1,
-            });
-            await this.actionHandler(action);
+          if (this.actionHandler) {
+            for (const action of actions) {
+              logger({
+                category: "agent",
+                message: `Executing computer action: ${action.type}`,
+                level: 1,
+              });
+              await this.actionHandler(action);
+            }
           }
 
-          // Capture a screenshot
+          // Capture a screenshot after all actions in the batch
           const screenshot = await this.captureScreenshot();
 
-          // Create a computer_call_output for the next request
+          // Build the output — use "computer_screenshot" for new format, "input_image" for legacy
+          const outputType = this.usesNewComputerTool
+            ? ("computer_screenshot" as const)
+            : ("input_image" as const);
+
           const outputItem = {
             type: "computer_call_output" as const,
             call_id: item.call_id,
             output: {
-              type: "input_image" as const,
-              image_url: screenshot,
+              type: outputType,
+              image_url: this.toDataUrl(screenshot),
+              ...(this.usesNewComputerTool
+                ? { detail: "original" as const }
+                : {}),
             },
           } as ResponseInputItem;
 
@@ -633,13 +651,13 @@ export class OpenAICUAClient extends AgentClient {
             level: 2,
           });
 
-          // Add current URL if available
-          if (this.currentUrl) {
+          // Legacy format supports current_url on the output; new format does not
+          if (!this.usesNewComputerTool && this.currentUrl) {
             const computerCallOutput = outputItem as {
               type: "computer_call_output";
               call_id: string;
               output: {
-                type: "input_image";
+                type: "input_image" | "computer_screenshot";
                 image_url: string;
                 current_url?: string;
               };
@@ -662,7 +680,7 @@ export class OpenAICUAClient extends AgentClient {
                 type: "computer_call_output";
                 call_id: string;
                 output: {
-                  type: "input_image";
+                  type: "input_image" | "computer_screenshot";
                   image_url: string;
                 };
                 acknowledged_safety_checks?: SafetyCheck[];
@@ -687,26 +705,31 @@ export class OpenAICUAClient extends AgentClient {
           });
 
           try {
-            // Capture a screenshot even on error
             const screenshot = await this.captureScreenshot();
+
+            const outputType = this.usesNewComputerTool
+              ? ("computer_screenshot" as const)
+              : ("input_image" as const);
 
             const errorOutputItem = {
               type: "computer_call_output" as const,
               call_id: item.call_id,
               output: {
-                type: "input_image" as const,
-                image_url: screenshot,
+                type: outputType,
+                image_url: this.toDataUrl(screenshot),
                 error: errorMessage,
+                ...(this.usesNewComputerTool
+                  ? { detail: "original" as const }
+                  : {}),
               },
             } as ResponseInputItem;
 
-            // Add current URL if available
-            if (this.currentUrl) {
+            if (!this.usesNewComputerTool && this.currentUrl) {
               const computerCallOutput = errorOutputItem as {
                 type: "computer_call_output";
                 call_id: string;
                 output: {
-                  type: "input_image";
+                  type: "input_image" | "computer_screenshot";
                   image_url: string;
                   current_url?: string;
                 };
@@ -729,7 +752,7 @@ export class OpenAICUAClient extends AgentClient {
                   type: "computer_call_output";
                   call_id: string;
                   output: {
-                    type: "input_image";
+                    type: "input_image" | "computer_screenshot";
                     image_url: string;
                   };
                   acknowledged_safety_checks?: SafetyCheck[];
@@ -744,14 +767,12 @@ export class OpenAICUAClient extends AgentClient {
             if (screenshotError instanceof StagehandClosedError) {
               throw screenshotError;
             }
-            // If we can't capture a screenshot, just send the error
             logger({
               category: "agent",
               message: `Error capturing screenshot: ${String(screenshotError)}`,
               level: 0,
             });
 
-            // For error cases without a screenshot, we need to use a string output
             nextInputItems.push({
               type: "computer_call_output",
               call_id: item.call_id,
@@ -863,12 +884,11 @@ export class OpenAICUAClient extends AgentClient {
     call: ComputerCallItem,
   ): AgentAction | null {
     const { action } = call;
+    if (!action) return null;
 
-    // Instead of wrapping the action in a params object, spread the action properties directly
-    // This ensures properties like x, y, button, etc. are directly accessible on the AgentAction
     return {
       type: action.type as string,
-      ...action, // Spread all properties from the action
+      ...action,
     };
   }
 
@@ -882,7 +902,9 @@ export class OpenAICUAClient extends AgentClient {
     return notes;
   }
 
-  private async captureInitialScreenshot(): Promise<string | undefined> {
+  private async captureInitialScreenshot(): Promise<
+    ScreenshotProviderResult | undefined
+  > {
     if (!this.screenshotProvider) {
       return undefined;
     }
@@ -892,6 +914,18 @@ export class OpenAICUAClient extends AgentClient {
     } catch {
       return undefined;
     }
+  }
+
+  private convertComputerCallToActions(call: ComputerCallItem): AgentAction[] {
+    if (call.actions && Array.isArray(call.actions)) {
+      return call.actions.map((action) => ({
+        type: action.type as string,
+        ...action,
+      }));
+    }
+
+    const single = this.convertComputerCallToAction(call);
+    return single ? [single] : [];
   }
 
   private convertFunctionCallToAction(
@@ -912,18 +946,21 @@ export class OpenAICUAClient extends AgentClient {
 
   async captureScreenshot(options?: {
     base64Image?: string;
+    mediaType?: "image/png" | "image/jpeg";
     currentUrl?: string;
-  }): Promise<string> {
+  }): Promise<ScreenshotProviderResult> {
     // Use provided options if available
     if (options?.base64Image) {
-      return `data:image/png;base64,${options.base64Image}`;
+      return {
+        base64: options.base64Image,
+        mediaType: options.mediaType ?? "image/png",
+      };
     }
 
     // Use the screenshot provider if available
     if (this.screenshotProvider) {
       try {
-        const base64Image = await this.screenshotProvider();
-        return `data:image/png;base64,${base64Image}`;
+        return await this.screenshotProvider();
       } catch (error) {
         console.error("Error capturing screenshot:", error);
         throw error;
@@ -932,7 +969,12 @@ export class OpenAICUAClient extends AgentClient {
 
     throw new AgentScreenshotProviderError(
       "`screenshotProvider` has not been set. " +
-        "Please call `setScreenshotProvider()` with a valid function that returns a base64-encoded image",
+        "Please call `setScreenshotProvider()` with a valid function that returns a base64-encoded image and media type",
     );
+  }
+
+  /** Build the `data:` URL the OpenAI image payload expects. */
+  private toDataUrl(screenshot: ScreenshotProviderResult): string {
+    return `data:${screenshot.mediaType};base64,${screenshot.base64}`;
   }
 }

@@ -5,12 +5,19 @@ import {
   AgentResult,
   AgentType,
   AgentExecutionOptions,
+  ScreenshotProviderResult,
 } from "../types/public/agent.js";
 import { ClientOptions } from "../types/public/model.js";
 import { AgentClient } from "./AgentClient.js";
 import { AgentScreenshotProviderError } from "../types/public/sdkErrors.js";
 import { mapKeyToPlaywright } from "./utils/cuaKeyMapping.js";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import {
+  FlowLogger,
+  extractLlmCuaPromptSummary,
+  extractLlmCuaResponseSummary,
+} from "../flowlogger/FlowLogger.js";
+import { v7 as uuidv7 } from "uuid";
 
 /**
  * Message types for FARA agent
@@ -50,7 +57,7 @@ export class MicrosoftCUAClient extends AgentClient {
   private client: OpenAI;
   private currentViewport = { width: 1288, height: 711 };
   private currentUrl?: string;
-  private screenshotProvider?: () => Promise<string>;
+  private screenshotProvider?: () => Promise<ScreenshotProviderResult>;
   private actionHandler?: (action: AgentAction) => Promise<void>;
 
   // Dual history system
@@ -132,7 +139,9 @@ export class MicrosoftCUAClient extends AgentClient {
     this.currentUrl = url;
   }
 
-  setScreenshotProvider(provider: () => Promise<string>): void {
+  setScreenshotProvider(
+    provider: () => Promise<ScreenshotProviderResult>,
+  ): void {
     this.screenshotProvider = provider;
   }
 
@@ -526,8 +535,8 @@ For each function call, return a json object with function name and arguments wi
       throw new AgentScreenshotProviderError("Screenshot provider not set");
     }
 
-    const base64Screenshot = await this.screenshotProvider();
-    return `data:image/png;base64,${base64Screenshot}`;
+    const screenshot = await this.screenshotProvider();
+    return `data:${screenshot.mediaType};base64,${screenshot.base64}`;
   }
 
   /**
@@ -714,6 +723,13 @@ For each function call, return a json object with function name and arguments wi
       level: 2,
     });
 
+    const llmRequestId = uuidv7();
+    FlowLogger.logLlmRequest({
+      requestId: llmRequestId,
+      model: this.modelName,
+      prompt: extractLlmCuaPromptSummary(history),
+    });
+
     const startTime = Date.now();
     let response;
     try {
@@ -744,6 +760,14 @@ For each function call, return a json object with function name and arguments wi
       completion_tokens: 0,
       total_tokens: 0,
     };
+
+    FlowLogger.logLlmResponse({
+      requestId: llmRequestId,
+      model: this.modelName,
+      output: extractLlmCuaResponseSummary([{ text: content }]),
+      inputTokens: usage.prompt_tokens,
+      outputTokens: usage.completion_tokens,
+    });
 
     // Add assistant response to both histories
     const assistantMsg: FaraMessage = {

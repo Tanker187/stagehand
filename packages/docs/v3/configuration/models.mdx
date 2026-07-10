@@ -221,19 +221,47 @@ await stagehand.init();
 <Tab title="Azure">
 
 <CodeGroup>
-```typescript TypeScript
+```typescript API Key
 import { Stagehand } from "@browserbasehq/stagehand";
 
 const stagehand = new Stagehand({
   env: "BROWSERBASE",
-  model: "azure/gpt-5"
+  model: "azure/gpt-5",
   // API key auto-loads from AZURE_API_KEY - set in your .env
 });
 
 await stagehand.init();
 
 ```
+
+```typescript Microsoft Entra ID
+import { Stagehand } from "@browserbasehq/stagehand";
+
+const stagehand = new Stagehand({
+  env: "BROWSERBASE",
+  model: {
+    provider: "azure",
+    modelName: "azure/gpt-5",
+    auth: {
+      type: "azureEntraId",
+      token: process.env.AZURE_ENTRA_ID_TOKEN,
+    },
+    providerOptions: {
+      azure: {
+        resourceName: "your-azure-openai-resource",
+        apiVersion: "2024-10-01-preview",
+      },
+    },
+  },
+});
+
+await stagehand.init();
+
+```
 </CodeGroup>
+
+For Microsoft Entra ID authentication, pass the bearer token explicitly in `auth.token`. The `providerOptions.azure.resourceName` identifies the Azure OpenAI resource to call.
+
 [View all supported Azure models →](https://ai.azure.com/catalog)
 </Tab>
 
@@ -664,17 +692,25 @@ const agent = stagehand.agent({
 <Accordion title="All Supported CUA Models">
 | Provider | Model |
 | -------- | ----- |
+| Anthropic | `anthropic/claude-haiku-4-5` |
 | Anthropic | `anthropic/claude-haiku-4-5-20251001` |
-| Anthropic | `anthropic/claude-sonnet-4-6` |
+| Anthropic | `anthropic/claude-sonnet-4-20250514` |
 | Anthropic | `anthropic/claude-sonnet-4-5-20250929` |
+| Anthropic | `anthropic/claude-sonnet-4-6` |
 | Anthropic | `anthropic/claude-opus-4-5-20251101` |
 | Anthropic | `anthropic/claude-opus-4-6` |
+| Anthropic | `anthropic/claude-opus-4-8` |
+| Anthropic | `anthropic/claude-fable-5` |
 | Google   | `google/gemini-2.5-computer-use-preview-10-2025` |
 | Google   | `google/gemini-3-flash-preview` |
+| Google   | `google/gemini-3.5-flash` |
 | Google   | `google/gemini-3-pro-preview` |
 | Microsoft | `microsoft/fara-7b` |
 | OpenAI   | `openai/computer-use-preview` |
 | OpenAI   | `openai/computer-use-preview-2025-03-11` |
+| OpenAI   | `openai/gpt-5.4` |
+| OpenAI   | `openai/gpt-5.4-mini` |
+| OpenAI   | `openai/gpt-5.5` |
 </Accordion>
 
 <Note>

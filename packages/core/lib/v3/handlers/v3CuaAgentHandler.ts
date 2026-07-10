@@ -8,6 +8,12 @@ import { OpenAICUAClient } from "../agent/OpenAICUAClient.js";
 import { mapKeyToPlaywright } from "../agent/utils/cuaKeyMapping.js";
 import { ensureXPath } from "../agent/utils/xpath.js";
 import {
+  captureProbeEvidence,
+  emitPostStepProbeEvidence,
+} from "../agent/utils/postStepProbeEvidence.js";
+import { wrapEvidenceCallback } from "../agent/utils/wrapEvidenceCallback.js";
+import { inferToolOutput } from "../agent/utils/toolOutputEvidence.js";
+import {
   ActionExecutionResult,
   AgentAction,
   AgentExecuteOptions,
@@ -16,6 +22,10 @@ import {
   SafetyConfirmationHandler,
 } from "../types/public/agent.js";
 import { LogLine } from "../types/public/logs.js";
+import type {
+  AgentEvidenceCallback,
+  AgentStepFinishedEvent,
+} from "../types/public/agentEvidenceEvents.js";
 import { type Action, V3FunctionName } from "../types/public/methods.js";
 import { FlowLogger } from "../flowlogger/FlowLogger.js";
 import { toTitleCase } from "../../utils.js";
@@ -37,6 +47,8 @@ export class V3CuaAgentHandler {
   private captchaSolver: CaptchaSolver | null = null;
   private captchaClickGuardRemaining = 0;
   private currentInstruction = "";
+  private lastAgentScreenshotUrl?: string;
+  private evidenceCallback?: AgentEvidenceCallback;
 
   constructor(
     v3: V3,
@@ -75,8 +87,17 @@ export class V3CuaAgentHandler {
     this.agentClient.setScreenshotProvider(async () => {
       this.ensureNotClosed();
       const page = await this.v3.context.awaitActivePage();
-      const screenshotBuffer = await page.screenshot({ fullPage: false });
-      return screenshotBuffer.toString("base64"); // base64 png
+      const screenshotBuffer = await page.screenshot({
+        fullPage: false,
+        type: "png",
+      });
+
+      await this.emitCuaScreenshot(screenshotBuffer, page.url());
+
+      return {
+        base64: screenshotBuffer.toString("base64"),
+        mediaType: "image/png",
+      };
     });
 
     // Provide action executor
@@ -119,7 +140,12 @@ export class V3CuaAgentHandler {
       const waitBetween =
         (this.options.clientOptions?.waitBetweenActions as number) ||
         defaultDelay;
+      // Skip logging for screenshot actions - they're no-ops; the CUA client
+      // takes its own screenshot via screenshotProvider between API turns.
+      // Computed outside the try so the catch can still record a failed step.
+      const shouldLog = action.type !== "screenshot";
       try {
+        let executionResult: ActionExecutionResult | undefined;
         // Try to inject cursor before each action if enabled
         if (this.highlightCursor) {
           try {
@@ -129,11 +155,8 @@ export class V3CuaAgentHandler {
           }
         }
         await new Promise((r) => setTimeout(r, 300));
-        // Skip logging for screenshot actions - they're no-ops, the actual
-        // Page.screenshot in captureAndSendScreenshot() is logged separately
-        const shouldLog = action.type !== "screenshot";
         if (shouldLog) {
-          await FlowLogger.runWithLogging(
+          executionResult = await FlowLogger.runWithLogging(
             {
               eventType: `V3Cua${toTitleCase(action.type)}`, // e.g. "V3CuaClick"
               data: {
@@ -145,23 +168,18 @@ export class V3CuaAgentHandler {
             [action],
           );
         } else {
-          await this.executeAction(action);
+          executionResult = await this.executeAction(action);
         }
 
         action.timestamp = Date.now();
+        if (shouldLog && this.evidenceCallback) {
+          await this.emitCuaActionStep(
+            action,
+            inferToolOutput(executionResult ?? { success: true }),
+          );
+        }
 
         await new Promise((r) => setTimeout(r, waitBetween));
-        try {
-          await this.captureAndSendScreenshot();
-        } catch (e) {
-          this.logger({
-            category: "agent",
-            message: `Warning: Failed to take screenshot after action: ${String(
-              (e as Error)?.message ?? e,
-            )}`,
-            level: 1,
-          });
-        }
       } catch (error) {
         const msg = (error as Error)?.message ?? String(error);
         this.logger({
@@ -169,6 +187,30 @@ export class V3CuaAgentHandler {
           message: `Error executing action ${action.type}: ${msg}`,
           level: 0,
         });
+        // Record the failed action as an ok:false step (with a best-effort
+        // post-failure probe, since a throwing action can still partially
+        // mutate the page) before rethrowing — otherwise the failure is
+        // dropped from the persisted trajectory. Evidence emission must never
+        // mask the original action error.
+        if (shouldLog && this.evidenceCallback) {
+          try {
+            await this.emitCuaActionStep(action, {
+              ok: false,
+              result: undefined,
+              error: msg,
+            });
+          } catch (evidenceError) {
+            this.logger({
+              category: "agent",
+              message: `Failed to record failed-action evidence: ${
+                evidenceError instanceof Error
+                  ? evidenceError.message
+                  : String(evidenceError)
+              }`,
+              level: 1,
+            });
+          }
+        }
         throw error;
       }
     });
@@ -195,6 +237,11 @@ export class V3CuaAgentHandler {
         : optionsOrInstruction;
 
     this.setSafetyConfirmationHandler(options.callbacks?.onSafetyConfirmation);
+    this.evidenceCallback = wrapEvidenceCallback(
+      options.callbacks?.onEvidence,
+      this.logger,
+    );
+    this.lastAgentScreenshotUrl = undefined;
 
     this.highlightCursor = options.highlightCursor !== false;
     this.currentInstruction = options.instruction;
@@ -250,7 +297,28 @@ export class V3CuaAgentHandler {
     let result: AgentResult;
     try {
       result = await this.agent.execute({ options, logger: this.logger });
+      if (this.evidenceCallback) {
+        let finalUrl = "";
+        try {
+          finalUrl = (await this.v3.context.awaitActivePage()).url();
+        } catch {
+          finalUrl = this.lastAgentScreenshotUrl ?? "";
+        }
+        const observation = await captureProbeEvidence({
+          v3: this.v3,
+          url: finalUrl,
+          logger: this.logger,
+          warningMessage: "Warning: CUA final probe failed",
+        });
+        await this.evidenceCallback({
+          type: "final_answer",
+          message: result.message,
+          output: result.output,
+          observation,
+        });
+      }
     } finally {
+      this.evidenceCallback = undefined;
       this.captchaSolver?.dispose();
       this.captchaSolver = null;
     }
@@ -335,6 +403,7 @@ export class V3CuaAgentHandler {
         }
         return { success: true };
       }
+      case "triple_click":
       case "tripleClick": {
         const { x, y } = action;
         if (recording) {
@@ -389,28 +458,32 @@ export class V3CuaAgentHandler {
       case "keypress": {
         const { keys } = action;
         const keyList = Array.isArray(keys) ? keys : [keys];
-        const stagehandActions: Action[] = [];
-        for (const rawKey of keyList) {
-          const mapped = mapKeyToPlaywright(String(rawKey ?? ""));
+        if (keyList.length > 0) {
+          // CUA "keypress" actions describe a single key *chord* (modifiers held
+          // down for the main key), not a sequence of independent presses.
+          // Pressing each key separately released modifiers before the main key,
+          // so combinations like ["Control", "A"] sent Ctrl on its own and then
+          // typed a literal "a" instead of select-all. Join into one
+          // "+"-delimited combination so page.keyPress holds the modifiers down.
+          // page.keyPress already handles the literal "+" key correctly.
+          const mapped = keyList
+            .map((rawKey) => mapKeyToPlaywright(String(rawKey ?? "")))
+            .join("+");
           await page.keyPress(mapped);
           if (recording) {
-            stagehandActions.push({
-              selector: "xpath=/html",
-              description: `press ${mapped}`,
-              method: "press",
-              arguments: [mapped],
-            });
+            this.recordCuaActStep(
+              action,
+              [
+                {
+                  selector: "xpath=/html",
+                  description: `press ${mapped}`,
+                  method: "press",
+                  arguments: [mapped],
+                },
+              ],
+              `press ${mapped}`,
+            );
           }
-        }
-        if (recording && stagehandActions.length > 0) {
-          this.recordCuaActStep(
-            action,
-            stagehandActions,
-            stagehandActions
-              .map((a) => a.description)
-              .filter(Boolean)
-              .join(", ") || "keypress",
-          );
         }
         return { success: true };
       }
@@ -503,7 +576,8 @@ export class V3CuaAgentHandler {
         return { success: true };
       }
       case "screenshot": {
-        // No-op - screenshot is captured by captureAndSendScreenshot() after all actions
+        // No-op - the CUA client captures a screenshot itself after each
+        // computer_call (or batch of actions) for the next request.
         return { success: true };
       }
       case "goto": {
@@ -664,11 +738,19 @@ export class V3CuaAgentHandler {
     });
     try {
       const page = await this.v3.context.awaitActivePage();
-      const screenshotBuffer = await page.screenshot({ fullPage: false });
+      const screenshotBuffer = await page.screenshot({
+        fullPage: false,
+        type: "png",
+      });
 
       const currentUrl = page.url();
+
+      // Mirror the same buffer the CUA client receives as agent evidence.
+      await this.emitCuaScreenshot(screenshotBuffer, currentUrl);
+
       return await this.agentClient.captureScreenshot({
         base64Image: screenshotBuffer.toString("base64"),
+        mediaType: "image/png",
         currentUrl,
       });
     } catch (e) {
@@ -774,6 +856,75 @@ export class V3CuaAgentHandler {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Emit a pre-action CUA screenshot — the exact buffer the model received
+   * as input. Tier-1 evidence (agent-mirrored); the tier-2 probe is taken
+   * separately in emitCuaActionStep after the action runs, so the recorder
+   * can compare what the model saw against what the page actually showed
+   * once the keystrokes/clicks landed.
+   */
+  private async emitCuaScreenshot(
+    screenshot: Buffer,
+    url: string,
+  ): Promise<void> {
+    if (!this.evidenceCallback) return;
+    this.lastAgentScreenshotUrl = url;
+    await this.evidenceCallback({
+      type: "screenshot",
+      screenshot,
+      url,
+      evidenceRole: "agent",
+    });
+  }
+
+  private async emitCuaActionStep(
+    action: AgentAction,
+    toolOutput: AgentStepFinishedEvent["toolOutput"],
+  ): Promise<void> {
+    let pageUrl =
+      typeof action.pageUrl === "string"
+        ? action.pageUrl
+        : (this.lastAgentScreenshotUrl ?? "");
+    try {
+      pageUrl = (await this.v3.context.awaitActivePage()).url();
+    } catch {
+      // Keep the best pre-action URL fallback.
+    }
+
+    const actionArgs = Object.fromEntries(
+      Object.entries(action).filter(
+        ([key]) => key !== "screenshot" && key !== "timestamp",
+      ),
+    );
+    const reasoning =
+      typeof action.reasoning === "string"
+        ? action.reasoning
+        : typeof action.action === "string"
+          ? action.action
+          : "";
+
+    await this.evidenceCallback?.({
+      type: "step_finished",
+      actionName: String(action.type),
+      actionArgs,
+      reasoning,
+      toolOutput,
+    });
+
+    // Post-action tier-2 probe. The pre-action screenshot from
+    // screenshotProvider is what the model SAW; this one shows what the
+    // page actually LOOKS LIKE after the action ran. Without this the
+    // verifier has no visual evidence that keystrokes/clicks landed, and
+    // has to trust the action history alone.
+    await emitPostStepProbeEvidence({
+      v3: this.v3,
+      url: pageUrl,
+      evidenceCallback: this.evidenceCallback,
+      logger: this.logger,
+      warningMessage: "Warning: CUA post-action probe failed",
+    });
   }
 
   private async injectCursor(): Promise<void> {

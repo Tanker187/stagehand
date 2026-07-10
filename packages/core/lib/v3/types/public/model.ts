@@ -1,5 +1,4 @@
 import type { ClientOptions as AnthropicClientOptionsBase } from "@anthropic-ai/sdk";
-import type { GoogleVertexProviderSettings as GoogleVertexProviderSettingsBase } from "@ai-sdk/google-vertex";
 import type {
   LanguageModelV2,
   LanguageModelV2Middleware,
@@ -18,11 +17,11 @@ export type AnthropicClientOptions = Pick<
 >;
 
 export interface GoogleServiceAccountCredentials {
-  type?: string;
+  type?: "service_account";
   project_id?: string;
   private_key_id?: string;
-  private_key?: string;
-  client_email?: string;
+  private_key: string;
+  client_email: string;
   client_id?: string;
   auth_uri?: string;
   token_uri?: string;
@@ -31,14 +30,39 @@ export interface GoogleServiceAccountCredentials {
   universe_domain?: string;
 }
 
-export type GoogleVertexProviderSettings = Pick<
-  GoogleVertexProviderSettingsBase,
-  "project" | "location" | "headers"
-> & {
-  googleAuthOptions?: {
-    credentials?: GoogleServiceAccountCredentials;
-  };
-};
+export interface GoogleServiceAccountAuth {
+  type: "googleServiceAccount";
+  credentials: GoogleServiceAccountCredentials;
+  scopes?: string | string[];
+  projectId?: string;
+  universeDomain?: string;
+}
+
+export interface AzureEntraIdAuth {
+  type: "azureEntraId";
+  token: string;
+}
+
+export type ModelAuth = GoogleServiceAccountAuth | AzureEntraIdAuth;
+
+export interface VertexProviderOptions {
+  project: string;
+  location: string;
+  baseURL?: string;
+  headers?: Record<string, string>;
+}
+
+export interface AzureProviderOptions {
+  resourceName?: string;
+  baseURL?: string;
+  apiVersion?: string;
+  useDeploymentBasedUrls?: boolean;
+  headers?: Record<string, string>;
+}
+
+export type ModelProviderOptions =
+  | { vertex: VertexProviderOptions; azure?: never }
+  | { azure: AzureProviderOptions; vertex?: never };
 
 export type AnthropicJsonSchemaObject = {
   definitions?: {
@@ -97,20 +121,47 @@ export type ModelProvider =
   | "google"
   | "aisdk";
 
-export type ClientOptions = (
-  | OpenAIClientOptions
-  | AnthropicClientOptions
-  | GoogleVertexProviderSettings
-) & {
+/**
+ * Effort levels for Claude adaptive thinking.
+ * Used with Claude 4.6+ models (claude-opus-4-6, claude-sonnet-4-6).
+ * - "none": Disable adaptive thinking entirely
+ * - "low": Claude minimizes thinking, skips for simple tasks
+ * - "medium": Claude uses moderate thinking, may skip for simple queries (default)
+ * - "high": Claude always thinks with deep reasoning
+ * - "xhigh": Deeper reasoning than "high" (Opus 4.7/4.8 and Fable 5 only)
+ * - "max": Claude always thinks with no constraints
+ */
+export type ThinkingEffort =
+  | "none"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
+
+export type ClientOptions = (OpenAIClientOptions | AnthropicClientOptions) & {
   apiKey?: string;
   provider?: AgentProviderType;
+  auth?: ModelAuth;
+  providerOptions?: ModelProviderOptions;
   baseURL?: string;
   /** OpenAI organization ID */
   organization?: string;
   /** Delay between agent actions in ms */
   waitBetweenActions?: number;
-  /** Anthropic thinking budget for extended thinking */
+  /**
+   * @deprecated For Claude 4.6+ models, use `thinkingEffort` instead.
+   * Anthropic thinking budget for extended thinking (used with older Claude models like 4.5).
+   * Sets `thinking.type: "enabled"` with the specified `budget_tokens`.
+   */
   thinkingBudget?: number;
+  /**
+   * Effort level for Claude adaptive thinking (Claude 4.6+ models only).
+   * Uses `thinking.type: "adaptive"` with `output_config.effort`.
+   * This is the recommended approach for Claude Opus 4.6 and Sonnet 4.6.
+   * @see https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking
+   */
+  thinkingEffort?: ThinkingEffort;
   /** Environment type for CUA agents (browser, mac, windows, ubuntu) */
   environment?: string;
   /** Max images for Microsoft FARA agent */

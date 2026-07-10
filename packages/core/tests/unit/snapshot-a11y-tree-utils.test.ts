@@ -17,6 +17,11 @@ const axString = (value: string): Protocol.Accessibility.AXValue => ({
   value,
 });
 
+const axBool = (value: boolean): Protocol.Accessibility.AXValue => ({
+  type: "boolean",
+  value,
+});
+
 const defaultOpts: A11yOptions = {
   focusSelector: undefined,
   experimental: false,
@@ -81,6 +86,28 @@ describe("decorateRoles", () => {
     ]);
   });
 
+  it("overrides role to 'input, file' for file inputs", () => {
+    const opts: A11yOptions = {
+      ...defaultOpts,
+      tagNameMap: { "enc-10": "input, file" },
+      scrollableMap: {},
+    };
+    const nodes = [
+      makeAxNode({
+        backendDOMNodeId: 10,
+        role: axString("button"),
+        name: axString("Choose File"),
+      }),
+    ];
+
+    const decorated = decorateRoles(nodes, opts);
+    expect(decorated[0]).toMatchObject({
+      encodedId: "enc-10",
+      role: "input, file",
+      name: "Choose File",
+    });
+  });
+
   it("falls back when encoding fails", () => {
     const opts: A11yOptions = {
       ...defaultOpts,
@@ -91,6 +118,37 @@ describe("decorateRoles", () => {
     const nodes = [makeAxNode({ backendDOMNodeId: 4 })];
     const decorated = decorateRoles(nodes, opts);
     expect(decorated[0]?.encodedId).toBeUndefined();
+  });
+
+  it("maps selected/checked AX properties into boolean fields", () => {
+    const nodes = [
+      makeAxNode({
+        backendDOMNodeId: 12,
+        role: axString("option"),
+        name: axString("Option B"),
+        properties: [{ name: "selected", value: axBool(true) }],
+      }),
+      makeAxNode({
+        backendDOMNodeId: 13,
+        role: axString("radio"),
+        name: axString("Option C"),
+        properties: [{ name: "checked", value: axBool(true) }],
+      }),
+      makeAxNode({
+        backendDOMNodeId: 14,
+        role: axString("radio"),
+        name: axString("Option D"),
+        properties: [
+          { name: "selected", value: axBool(true) },
+          { name: "checked", value: axBool(true) },
+        ],
+      }),
+    ];
+
+    const decorated = decorateRoles(nodes, defaultOpts);
+    expect(decorated[0]).toMatchObject({ selected: true, checked: undefined });
+    expect(decorated[1]).toMatchObject({ selected: undefined, checked: true });
+    expect(decorated[2]).toMatchObject({ selected: true, checked: true });
   });
 });
 

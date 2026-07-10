@@ -10,7 +10,11 @@ import {
   StagehandZodSchema,
   toJsonSchema,
 } from "./zodCompat.js";
-import { loadApiKeyFromEnv } from "../utils.js";
+import {
+  getInheritableModelOptions,
+  hasModelProviderAuth,
+  loadApiKeyFromEnv,
+} from "../utils.js";
 import { extractModelName } from "../modelUtils.js";
 import { StagehandLogger, LoggerOptions } from "../logger.js";
 import { ActCache } from "./cache/ActCache.js";
@@ -46,12 +50,14 @@ import type {
   ShutdownSupervisorConfig,
   ShutdownSupervisorHandle,
 } from "./types/private/shutdown.js";
+import { HYBRID_CAPABLE_MODEL_PATTERNS } from "./types/private/agent.js";
 import {
   AgentConfig,
   AgentExecuteCallbacks,
   AgentExecuteOptions,
   AgentStreamExecuteOptions,
   AgentResult,
+  AgentToolMode,
   AVAILABLE_CUA_MODELS,
   LogLine,
   StagehandMetrics,
@@ -355,9 +361,9 @@ export class V3 {
       this.modelClientOptions = baseClientOptions;
       this.disableAPI = true;
     } else {
-      // Ensure API key is set
+      // Ensure API key is set unless provider-native auth was configured.
       let apiKey = (baseClientOptions as { apiKey?: string }).apiKey;
-      if (!apiKey) {
+      if (!apiKey && !hasModelProviderAuth(baseClientOptions)) {
         try {
           apiKey = loadApiKeyFromEnv(
             this.modelName.split("/")[0], // "openai", "anthropic", etc
@@ -374,7 +380,7 @@ export class V3 {
       }
       this.modelClientOptions = {
         ...baseClientOptions,
-        apiKey,
+        ...(apiKey ? { apiKey } : {}),
       } as ClientOptions;
 
       // Get the default client for this model
@@ -435,18 +441,126 @@ export class V3 {
   public get metrics(): Promise<StagehandMetrics> {
     if (this.apiClient) {
       // Fetch metrics from the API
-      return this.apiClient.getReplayMetrics().catch((error) => {
-        this.logger({
-          category: "metrics",
-          message: `Failed to fetch metrics from API: ${error}`,
-          level: 0,
+      return this.apiClient
+        .getReplayMetrics()
+        .then((metrics) => this.mergeAgentMetricsWithLocalFallback(metrics))
+        .catch((error) => {
+          this.logger({
+            category: "metrics",
+            message: `Failed to fetch metrics from API: ${error}`,
+            level: 0,
+          });
+          // Fall back to local metrics on error
+          return this.stagehandMetrics;
         });
-        // Fall back to local metrics on error
-        return this.stagehandMetrics;
-      });
     }
     // Return local metrics wrapped in a Promise for consistency
     return Promise.resolve(this.stagehandMetrics);
+  }
+
+  private mergeAgentMetricsWithLocalFallback(
+    remoteMetrics: StagehandMetrics,
+  ): StagehandMetrics {
+    // In API mode, agent.execute() is the only path that returns trusted inline
+    // usage today, so only repair the agent bucket from local state.
+    const agentPromptTokens = Math.max(
+      remoteMetrics.agentPromptTokens,
+      this.stagehandMetrics.agentPromptTokens,
+    );
+    const agentCompletionTokens = Math.max(
+      remoteMetrics.agentCompletionTokens,
+      this.stagehandMetrics.agentCompletionTokens,
+    );
+    const agentReasoningTokens = Math.max(
+      remoteMetrics.agentReasoningTokens,
+      this.stagehandMetrics.agentReasoningTokens,
+    );
+    const agentCachedInputTokens = Math.max(
+      remoteMetrics.agentCachedInputTokens,
+      this.stagehandMetrics.agentCachedInputTokens,
+    );
+    const agentInferenceTimeMs = Math.max(
+      remoteMetrics.agentInferenceTimeMs,
+      this.stagehandMetrics.agentInferenceTimeMs,
+    );
+
+    const metrics: StagehandMetrics = {
+      ...remoteMetrics,
+      agentPromptTokens,
+      agentCompletionTokens,
+      agentReasoningTokens,
+      agentCachedInputTokens,
+      agentInferenceTimeMs,
+      totalPromptTokens: 0,
+      totalCompletionTokens: 0,
+      totalReasoningTokens: 0,
+      totalCachedInputTokens: 0,
+      totalInferenceTimeMs: 0,
+    };
+
+    metrics.totalPromptTokens =
+      metrics.actPromptTokens +
+      metrics.extractPromptTokens +
+      metrics.observePromptTokens +
+      metrics.agentPromptTokens;
+    metrics.totalCompletionTokens =
+      metrics.actCompletionTokens +
+      metrics.extractCompletionTokens +
+      metrics.observeCompletionTokens +
+      metrics.agentCompletionTokens;
+    metrics.totalReasoningTokens =
+      metrics.actReasoningTokens +
+      metrics.extractReasoningTokens +
+      metrics.observeReasoningTokens +
+      metrics.agentReasoningTokens;
+    metrics.totalCachedInputTokens =
+      metrics.actCachedInputTokens +
+      metrics.extractCachedInputTokens +
+      metrics.observeCachedInputTokens +
+      metrics.agentCachedInputTokens;
+    metrics.totalInferenceTimeMs =
+      metrics.actInferenceTimeMs +
+      metrics.extractInferenceTimeMs +
+      metrics.observeInferenceTimeMs +
+      metrics.agentInferenceTimeMs;
+
+    return metrics;
+  }
+
+  private updateAgentMetricsFromUsage(usage?: AgentResult["usage"]): void {
+    if (!usage) {
+      return;
+    }
+
+    this.updateMetrics(
+      V3FunctionName.AGENT,
+      usage.input_tokens,
+      usage.output_tokens,
+      usage.reasoning_tokens ?? 0,
+      usage.cached_input_tokens ?? 0,
+      usage.inference_time_ms,
+    );
+  }
+
+  private getApiDefaultModelConfig(): ModelConfiguration | undefined {
+    const clientOptions = Object.fromEntries(
+      Object.entries(this.modelClientOptions).filter(
+        ([key, value]) => key !== "apiKey" && value !== undefined,
+      ),
+    );
+
+    if (Object.keys(clientOptions).length === 0) {
+      return undefined;
+    }
+
+    return {
+      modelName: this.modelName,
+      ...clientOptions,
+      ...(!hasModelProviderAuth(this.modelClientOptions) &&
+      (this.modelClientOptions as { apiKey?: string }).apiKey
+        ? { apiKey: (this.modelClientOptions as { apiKey?: string }).apiKey }
+        : {}),
+    } as ModelConfiguration;
   }
 
   private resolveLlmClient(model?: ModelConfiguration): LLMClient {
@@ -478,13 +592,27 @@ export class V3 {
     const overrideProvider = String(modelName).split("/")[0];
     const baseProvider = String(this.modelName).split("/")[0];
 
+    const overrideHasCredentials =
+      hasModelProviderAuth(clientOptions) ||
+      Boolean((clientOptions as { apiKey?: string } | undefined)?.apiKey);
+
+    const inheritedOptions =
+      overrideProvider === baseProvider
+        ? overrideHasCredentials
+          ? getInheritableModelOptions(this.modelClientOptions)
+          : this.modelClientOptions
+        : undefined;
+
     const mergedOptions = {
-      ...(overrideProvider === baseProvider ? this.modelClientOptions : {}),
+      ...(inheritedOptions ?? {}),
       ...(clientOptions ?? {}),
     } as ClientOptions;
 
     const providerKey = overrideProvider;
-    if (!(mergedOptions as { apiKey?: string }).apiKey) {
+    if (
+      !hasModelProviderAuth(mergedOptions) &&
+      !(mergedOptions as { apiKey?: string }).apiKey
+    ) {
       const apiKey = loadApiKeyFromEnv(providerKey, this.logger);
       if (apiKey) {
         (mergedOptions as { apiKey?: string }).apiKey = apiKey;
@@ -524,6 +652,16 @@ export class V3 {
 
     this.overrideLlmClients.set(cacheKey, client);
     return client;
+  }
+
+  private resolveDefaultAgentMode(
+    model?: string | { modelName: string; [key: string]: unknown },
+  ): AgentToolMode {
+    const modelName = extractModelName(model) ?? this.modelName;
+    const matchedPattern = HYBRID_CAPABLE_MODEL_PATTERNS.find((pattern) =>
+      modelName.includes(pattern),
+    );
+    return matchedPattern ? "hybrid" : "dom";
   }
 
   private beginAgentReplayRecording(): void {
@@ -813,6 +951,7 @@ export class V3 {
             this.ctx = await V3Context.create(lbo.cdpUrl, {
               env: "LOCAL",
               cdpHeaders: lbo.cdpHeaders,
+              localBrowserLaunchOptions: lbo,
             });
             this.ctx.conn.flowLoggerContext = this.flowLoggerContext;
             this.ctx.conn.onTransportClosed(this._onCdpClosed);
@@ -845,62 +984,14 @@ export class V3 {
             createdTemp = true;
           }
 
-          // Build chrome flags
-          const defaults = [
-            "--remote-allow-origins=*",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--disable-dev-shm-usage",
-            "--site-per-process",
-          ];
-          let chromeFlags: string[];
-          const ignore = lbo.ignoreDefaultArgs;
-          if (ignore === true) {
-            // drop defaults
-            chromeFlags = [];
-          } else if (Array.isArray(ignore)) {
-            chromeFlags = defaults.filter(
-              (f) => !ignore.some((ex) => f.includes(ex)),
-            );
-          } else {
-            chromeFlags = [...defaults];
-          }
-
-          // headless handled by launchLocalChrome
-          if (lbo.devtools) chromeFlags.push("--auto-open-devtools-for-tabs");
-          if (lbo.locale) chromeFlags.push(`--lang=${lbo.locale}`);
           if (!lbo.viewport) {
             lbo.viewport = DEFAULT_VIEWPORT;
           }
-          if (lbo.viewport?.width && lbo.viewport?.height) {
-            chromeFlags.push(
-              `--window-size=${lbo.viewport.width},${lbo.viewport.height + 87}`, // Added pixels to the window to account for the address bar
-            );
-          }
-          if (typeof lbo.deviceScaleFactor === "number") {
-            chromeFlags.push(
-              `--force-device-scale-factor=${Math.max(0.1, lbo.deviceScaleFactor)}`,
-            );
-          }
-          if (lbo.hasTouch) chromeFlags.push("--touch-events=enabled");
-          if (lbo.ignoreHTTPSErrors)
-            chromeFlags.push("--ignore-certificate-errors");
-          if (lbo.proxy?.server)
-            chromeFlags.push(`--proxy-server=${lbo.proxy.server}`);
-          if (lbo.proxy?.bypass)
-            chromeFlags.push(`--proxy-bypass-list=${lbo.proxy.bypass}`);
-
-          // add user-supplied args last
-          if (Array.isArray(lbo.args)) chromeFlags.push(...lbo.args);
 
           const keepAlive = this.keepAlive === true;
           const { ws, chrome } = await launchLocalChrome({
-            chromePath: lbo.executablePath,
-            chromeFlags,
-            port: lbo.port,
-            headless: lbo.headless,
+            ...lbo,
             userDataDir,
-            connectTimeoutMs: lbo.connectTimeoutMs,
             handleSIGINT: !keepAlive,
           });
           if (keepAlive) {
@@ -991,6 +1082,7 @@ export class V3 {
             const { sessionId, available } = await this.apiClient.init({
               modelName: this.modelName,
               modelApiKey: this.modelClientOptions.apiKey,
+              defaultModelConfig: this.getApiDefaultModelConfig(),
               domSettleTimeoutMs: this.domSettleTimeoutMs,
               verbose: this.verbose,
               systemPrompt: this.opts.systemPrompt,
@@ -1343,6 +1435,8 @@ export class V3 {
         model: options?.model,
         timeout: options?.timeout,
         selector: options?.selector,
+        ignoreSelectors: options?.ignoreSelectors,
+        screenshot: options?.screenshot,
         page,
       };
       let result: z.infer<typeof effectiveSchema> | { pageText: string };
@@ -1366,6 +1460,8 @@ export class V3 {
         {
           instruction,
           selector: options?.selector,
+          ignoreSelectors: options?.ignoreSelectors,
+          screenshot: options?.screenshot,
           timeout: options?.timeout,
           schema: historySchemaDescriptor,
         },
@@ -1415,6 +1511,7 @@ export class V3 {
         variables: options?.variables,
         timeout: options?.timeout,
         selector: options?.selector,
+        ignoreSelectors: options?.ignoreSelectors,
         page: page!,
       };
 
@@ -1436,6 +1533,8 @@ export class V3 {
         {
           instruction,
           variables: options?.variables,
+          selector: options?.selector,
+          ignoreSelectors: options?.ignoreSelectors,
           timeout: options?.timeout,
         },
         results,
@@ -1748,16 +1847,6 @@ export class V3 {
     llmClient: LLMClient;
   }> {
     // Note: experimental validation is done at the call site before this method
-    // Warn if mode is not explicitly set (defaults to "dom")
-    if (options?.mode === undefined) {
-      this.logger({
-        category: "agent",
-        message:
-          "Using agent in default DOM mode (legacy). Agent will default to 'hybrid' on an upcoming release for improved performance.\n  → https://docs.stagehand.dev/v3/basics/agent\n",
-        level: 0,
-      });
-    }
-
     const tools = options?.integrations
       ? await resolveTools(options.integrations, options.tools)
       : (options?.tools ?? {});
@@ -1768,6 +1857,14 @@ export class V3 {
 
     const resolvedExecutionModel = options?.executionModel ?? options?.model;
 
+    const resolvedMode =
+      options?.mode ?? this.resolveDefaultAgentMode(options?.model);
+
+    const agentThinkingEffort =
+      options?.model && typeof options.model === "object"
+        ? (options.model as { thinkingEffort?: string }).thinkingEffort
+        : undefined;
+
     const handler = new V3AgentHandler(
       this,
       this.logger,
@@ -1775,8 +1872,9 @@ export class V3 {
       resolvedExecutionModel,
       options?.systemPrompt,
       tools,
-      options?.mode,
+      resolvedMode,
       this.isCaptchaAutoSolveEnabled,
+      agentThinkingEffort,
     );
 
     const resolvedOptions: AgentExecuteOptions | AgentStreamExecuteOptions =
@@ -1855,11 +1953,9 @@ export class V3 {
         | AgentStreamExecuteOptions,
     ) => Promise<AgentResult | AgentStreamResult>;
   } {
-    // Determine if CUA mode is enabled (via mode: "cua" or deprecated cua: true)
     const isCuaMode =
-      options?.mode !== undefined
-        ? options.mode === "cua"
-        : options?.cua === true;
+      options?.mode === "cua" ||
+      (options?.mode === undefined && options?.cua === true);
 
     // Emit deprecation warning for cua: true
     if (options?.cua === true) {
@@ -1874,13 +1970,17 @@ export class V3 {
       );
     }
 
+    const loggedMode =
+      options?.mode ??
+      (isCuaMode ? "cua" : this.resolveDefaultAgentMode(options?.model));
+
     this.logger({
       category: "agent",
       message: "Creating v3 agent instance",
       level: 1,
       auxiliary: {
         cua: { value: isCuaMode ? "true" : "false", type: "boolean" },
-        mode: { value: options?.mode ?? "dom", type: "string" },
+        mode: { value: loggedMode, type: "string" },
         model: {
           value: extractModelName(options?.model) ?? this.llmClient.modelName,
           type: "string",
@@ -1889,7 +1989,14 @@ export class V3 {
         tools: { value: JSON.stringify(options?.tools ?? {}), type: "object" },
         ...(options?.integrations && {
           integrations: {
-            value: JSON.stringify(options.integrations),
+            // Integrations may contain live MCP `Client` instances (from
+            // connectToMCPServer), which are circular and throw in JSON.stringify.
+            // Log a safe descriptor instead: keep URL strings, summarize clients.
+            value: JSON.stringify(
+              options.integrations.map((integration) =>
+                typeof integration === "string" ? integration : "[mcp client]",
+              ),
+            ),
             type: "object",
           },
         }),
@@ -2011,6 +2118,7 @@ export class V3 {
                   page.mainFrameId(),
                   !!cacheContext,
                 );
+                this.updateAgentMetricsFromUsage(result.usage);
                 if (cacheContext) {
                   const transferredEntry =
                     this.apiClient.consumeLatestAgentCacheEntry();
@@ -2145,6 +2253,7 @@ export class V3 {
                 page.mainFrameId(),
                 !!cacheContext,
               );
+              this.updateAgentMetricsFromUsage(result.usage);
               if (cacheContext) {
                 const transferredEntry =
                   this.apiClient.consumeLatestAgentCacheEntry();

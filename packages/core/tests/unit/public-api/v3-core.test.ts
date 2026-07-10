@@ -133,6 +133,28 @@ describe("V3 Core public API types", () => {
         (options: unknown) => Promise<unknown[]>
       >();
     });
+
+    it("has verifier facade methods", () => {
+      expectTypeOf<V3EvaluatorInstance["verify"]>().toExtend<
+        (
+          trajectory: Stagehand.Trajectory,
+          taskSpec: Stagehand.TaskSpec,
+        ) => Promise<Stagehand.EvaluationResult>
+      >();
+      expectTypeOf<V3EvaluatorInstance["generateRubric"]>().toExtend<
+        (taskSpec: Stagehand.TaskSpec) => Promise<Stagehand.Rubric>
+      >();
+    });
+
+    it("accepts legacy evaluator backend options", () => {
+      const mockV3 = {} as Stagehand.Stagehand;
+      expectTypeOf<typeof Stagehand.V3Evaluator>().toBeConstructibleWith(
+        mockV3,
+        {
+          backend: "legacy",
+        } satisfies Stagehand.V3EvaluatorConstructorOptions,
+      );
+    });
   });
 
   describe("V3FunctionName", () => {

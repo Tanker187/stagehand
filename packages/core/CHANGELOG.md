@@ -1,5 +1,111 @@
 # @browserbasehq/stagehand
 
+## 3.6.0
+
+### Minor Changes
+
+- [#2178](https://github.com/browserbase/stagehand/pull/2178) [`c49a3fc`](https://github.com/browserbase/stagehand/commit/c49a3fc47ada88322f7e11b7b72085f0147c43e3) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - add support for WebMCP
+
+### Patch Changes
+
+- [#2217](https://github.com/browserbase/stagehand/pull/2217) [`147e310`](https://github.com/browserbase/stagehand/commit/147e310b12ffa9a5a03d770b0f071495d7a3287d) Thanks [@monadoid](https://github.com/monadoid)! - Add Azure OpenAI Microsoft Entra ID model auth support.
+
+- [#2231](https://github.com/browserbase/stagehand/pull/2231) [`cf3603d`](https://github.com/browserbase/stagehand/commit/cf3603d1c1f017cd7c195bcbe4300814c694454b) Thanks [@miguelg719](https://github.com/miguelg719)! - Add claude-fable-5 support: native structured outputs via the @ai-sdk/anthropic bump, adaptive thinking (including the new "xhigh" effort) on the agent path, the API's built-in server-side refusal fallback to claude-opus-4-8, and auto tool choice for the final done call on models that reject forced tool use.
+
+- [#2233](https://github.com/browserbase/stagehand/pull/2233) [`8d7d414`](https://github.com/browserbase/stagehand/commit/8d7d414c70676a31ea9322073f514d5b9dd5ecb1) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - Normalize URLs in `ActCache` key derivation by sorting query parameters before hashing. Semantically equivalent URLs that differ only in parameter order (e.g. `?utm_source=email&id=42` vs `?id=42&utm_source=email`) now hit the cache instead of silently missing. Fragments and duplicate keys are preserved.
+
+- [#2229](https://github.com/browserbase/stagehand/pull/2229) [`fd42e65`](https://github.com/browserbase/stagehand/commit/fd42e65bb84825bdb7341a4953472db1ff774989) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - launch local browser with --enable-features=WebMCPTesting,DevToolsWebMCPSupport by default
+
+- [#2220](https://github.com/browserbase/stagehand/pull/2220) [`a64c6b7`](https://github.com/browserbase/stagehand/commit/a64c6b74cfce7341ad4bbb2d39ae22c082f5f61e) Thanks [@monadoid](https://github.com/monadoid)! - Fix Stagehand-generated shadow-root XPath resolution so deterministic actions can target elements inside web components.
+
+- [#2132](https://github.com/browserbase/stagehand/pull/2132) [`ed3e566`](https://github.com/browserbase/stagehand/commit/ed3e56636ee35b6eb2b1ad1af2bfb098a97aa39c) Thanks [@miguelg719](https://github.com/miguelg719)! - Add canonical verifier evidence normalization for screenshots and text signals without requiring image dependencies in core installs.
+
+- [#2133](https://github.com/browserbase/stagehand/pull/2133) [`840aac8`](https://github.com/browserbase/stagehand/commit/840aac8bfcd9b3debcddffea0ca0c3de4670cf2a) Thanks [@miguelg719](https://github.com/miguelg719)! - Add the rubric-based verifier engine with normalized public rubric output and bounded failure-step parsing.
+
+## 3.5.0
+
+### Minor Changes
+
+- [#2149](https://github.com/browserbase/stagehand/pull/2149) [`6e75725`](https://github.com/browserbase/stagehand/commit/6e75725b39898b3cbad681272009a69d94ca8238) Thanks [@miguelg719](https://github.com/miguelg719)! - Added a `screenshot` option to `extract()` that sends the current viewport screenshot with the a11y tree for extraction.
+
+- [#2127](https://github.com/browserbase/stagehand/pull/2127) [`78bcde8`](https://github.com/browserbase/stagehand/commit/78bcde88e28f147acc6ca9aef9753cd96c870c35) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - Add `ignoreDefaultArgs` option to selectively remove chrome-launcher's built-in default flags (e.g. `--disable-extensions`) when running locally
+
+- [#2160](https://github.com/browserbase/stagehand/pull/2160) [`49575d6`](https://github.com/browserbase/stagehand/commit/49575d62f56efbd3a91359a816823cbf70fde4fd) Thanks [@monadoid](https://github.com/monadoid)! - Forward constructor and request model configuration when initializing API-backed sessions.
+
+- [#2171](https://github.com/browserbase/stagehand/pull/2171) [`dc1445d`](https://github.com/browserbase/stagehand/commit/dc1445df805cd3ad1f577278f978932244023a2e) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - add native clipboard API
+
+### Patch Changes
+
+- [#2146](https://github.com/browserbase/stagehand/pull/2146) [`3a53ed4`](https://github.com/browserbase/stagehand/commit/3a53ed4ea97e079b295059a338f1ef8e768f8919) Thanks [@shriyatheunicorn](https://github.com/shriyatheunicorn)! - Pass local browser launch options through when attaching over CDP so explicit viewport settings are respected.
+
+- [#2107](https://github.com/browserbase/stagehand/pull/2107) [`8fc16d2`](https://github.com/browserbase/stagehand/commit/8fc16d2e1845807103da6e62928b28e0de03ab90) Thanks [@miguelg719](https://github.com/miguelg719)! - Fix Anthropic CUA `triple_click` action mapping.
+
+- [#2118](https://github.com/browserbase/stagehand/pull/2118) [`3e95a87`](https://github.com/browserbase/stagehand/commit/3e95a8722a46bd7fca4d79644fe4605d7dc61bf6) Thanks [@monadoid](https://github.com/monadoid)! - Add Vertex auth parameters to the core and server API schemas.
+
+- [#2126](https://github.com/browserbase/stagehand/pull/2126) [`ebbdcd3`](https://github.com/browserbase/stagehand/commit/ebbdcd33cbd137d36c9469c5ef0f531ee45a0bd8) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - fix(core): import ToolSet from ai public export
+
+- [#2120](https://github.com/browserbase/stagehand/pull/2120) [`12703a6`](https://github.com/browserbase/stagehand/commit/12703a6659853e2afe2d28df71d8a9b916f9df65) Thanks [@miguelg719](https://github.com/miguelg719)! - Fix structuredOutputMode for newer Anthropic models
+
+- [#2170](https://github.com/browserbase/stagehand/pull/2170) [`1db5f1c`](https://github.com/browserbase/stagehand/commit/1db5f1c1937b3943e13d8a43cbdeee0a6906ff75) Thanks [@Kylejeong2](https://github.com/Kylejeong2)! - Add Claude Opus 4.8 to the supported CUA model whitelist.
+
+- [#2116](https://github.com/browserbase/stagehand/pull/2116) [`cb586a1`](https://github.com/browserbase/stagehand/commit/cb586a14e46e616caa712afa6b7ceb4dc42b7fc6) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - include "[selected]" or "[checked]" state in snapshot
+
+- [#2129](https://github.com/browserbase/stagehand/pull/2129) [`765861c`](https://github.com/browserbase/stagehand/commit/765861c04c46851663919277f330d27a87bae823) Thanks [@miguelg719](https://github.com/miguelg719)! - Add a backend-selectable v3 evaluator facade while preserving the legacy evaluator path.
+
+- [#2157](https://github.com/browserbase/stagehand/pull/2157) [`2cd60a3`](https://github.com/browserbase/stagehand/commit/2cd60a34b0cfd7ae9399dd1a1779df096e86369b) Thanks [@miguelg719](https://github.com/miguelg719)! - Add verifier trajectory, rubric, and evaluation-result types with normalized public naming.
+
+- [#2131](https://github.com/browserbase/stagehand/pull/2131) [`e102a89`](https://github.com/browserbase/stagehand/commit/e102a89c903d2f5badb335dd7b7f52f16b275151) Thanks [@miguelg719](https://github.com/miguelg719)! - Capture verifier trajectory evidence from agent evidence callbacks for offline scoring.
+
+## 3.4.0
+
+### Minor Changes
+
+- [#2084](https://github.com/browserbase/stagehand/pull/2084) [`0641d44`](https://github.com/browserbase/stagehand/commit/0641d44a849062f5f7ce6a36a34ee95f9840efaa) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - add ignoreSelectors param to extract()
+
+- [#2096](https://github.com/browserbase/stagehand/pull/2096) [`a11603d`](https://github.com/browserbase/stagehand/commit/a11603d09d80f5e2fc341d154a0b90fe9fa48d1c) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - add ignoreSelectors to observe()
+
+### Patch Changes
+
+- [#2080](https://github.com/browserbase/stagehand/pull/2080) [`21c78b3`](https://github.com/browserbase/stagehand/commit/21c78b3a50fd20cbec7ca8aa5f766f55e17b0f78) Thanks [@miguelg719](https://github.com/miguelg719)! - Add variables support to v3 agentExecute API schema and remove experimental requirement
+
+- [#2077](https://github.com/browserbase/stagehand/pull/2077) [`f437f73`](https://github.com/browserbase/stagehand/commit/f437f738d23951cf460a30d3d285d1eba4c78ea2) Thanks [@monadoid](https://github.com/monadoid)! - Fix frame registry handling for OOPIF pages
+
+- [#2098](https://github.com/browserbase/stagehand/pull/2098) [`a783b99`](https://github.com/browserbase/stagehand/commit/a783b99fb947968b685050314bd1df256d7a1f5a) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - bump transitive deps to patched versions
+
+- [#2089](https://github.com/browserbase/stagehand/pull/2089) [`8d2f354`](https://github.com/browserbase/stagehand/commit/8d2f3541427ca7c9c6d9a831601a6a5babc48502) Thanks [@shrey150](https://github.com/shrey150)! - Strengthen observe prompts so LLMs return complete encoded element IDs.
+
+- [#2047](https://github.com/browserbase/stagehand/pull/2047) [`a87c1fc`](https://github.com/browserbase/stagehand/commit/a87c1fc435be83dbf14eab9edc6c421454ef7be4) Thanks [@tkattkat](https://github.com/tkattkat)! - Set default agent mode to hybrid with auto routing to dom for non compatible models
+
+- [#2101](https://github.com/browserbase/stagehand/pull/2101) [`26e6c96`](https://github.com/browserbase/stagehand/commit/26e6c960ca2894dc459ca40c9f31eb01e6d92053) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - move playwright-core, puppeteer-core, patchright-core from optional dependencies to peer dependencies
+
+- [#2068](https://github.com/browserbase/stagehand/pull/2068) [`1d176c4`](https://github.com/browserbase/stagehand/commit/1d176c466e25eb0cb03d9986b51d5cdb35a2e56b) Thanks [@filip-michalsky](https://github.com/filip-michalsky)! - Remove the default temperature setting from v3 agent AI SDK calls so reasoning models that do not support temperature run without provider warnings.
+
+- [#2040](https://github.com/browserbase/stagehand/pull/2040) [`1fa9613`](https://github.com/browserbase/stagehand/commit/1fa96130abbee2197a4e7f208878d06cba10c70b) Thanks [@monadoid](https://github.com/monadoid)! - Prefer `STAGEHAND_API_URL` for Stagehand API overrides while retaining `STAGEHAND_BASE_URL` as a deprecated fallback.
+
+- [#2065](https://github.com/browserbase/stagehand/pull/2065) [`9ff70dd`](https://github.com/browserbase/stagehand/commit/9ff70dd26cf4e03dce00ddcdc2d3b5e8d116781c) Thanks [@miguelg719](https://github.com/miguelg719)! - Add support for CUA models: openai/gpt-5.4-mini, openai/gpt-5.5, and anthropic/claude-haiku-4-5
+
+- [#2039](https://github.com/browserbase/stagehand/pull/2039) [`7640381`](https://github.com/browserbase/stagehand/commit/76403819b8f33d8d2670b6bea521a76f5ecc274e) Thanks [@monadoid](https://github.com/monadoid)! - Deprecate Browserbase project ID configuration.
+
+## 3.3.0
+
+### Minor Changes
+
+- [#1980](https://github.com/browserbase/stagehand/pull/1980) [`e471d2e`](https://github.com/browserbase/stagehand/commit/e471d2e89d41bac4e9b907ee9c0d7adc36828104) Thanks [@shrey150](https://github.com/shrey150)! - Support Browserbase verified session settings and bump the Browserbase SDK.
+
+### Patch Changes
+
+- [#1954](https://github.com/browserbase/stagehand/pull/1954) [`732b384`](https://github.com/browserbase/stagehand/commit/732b3840f1631210dad2c720ec567e15e69ed304) Thanks [@github-actions](https://github.com/apps/github-actions)! - Update Anthropic CUA to use adaptive thinking
+
+- [#2001](https://github.com/browserbase/stagehand/pull/2001) [`20b601d`](https://github.com/browserbase/stagehand/commit/20b601dc8779a1bacf66abb68ebdf276a238e5db) Thanks [@shrey150](https://github.com/shrey150)! - Include `agent.execute()` usage in `stagehand.metrics` for API-backed sessions.
+
+- [#1983](https://github.com/browserbase/stagehand/pull/1983) [`8543c11`](https://github.com/browserbase/stagehand/commit/8543c11f6b4816f5c94fefdc8083f3616b987b22) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add variable substitution to the keys tool in both live execution and cache replay paths. When keys steps with `method="type"` contain `%variableName%` tokens, they are now resolved against the provided variables. This brings the keys tool to parity with the type tool's variable handling.
+
+- [#1973](https://github.com/browserbase/stagehand/pull/1973) [`14b64ec`](https://github.com/browserbase/stagehand/commit/14b64ec7d226a3eb0ce1c19937f14581e61b7a85) Thanks [@monadoid](https://github.com/monadoid)! - Enable strict structured outputs for supported model paths.
+
+- [#2028](https://github.com/browserbase/stagehand/pull/2028) [`a500de1`](https://github.com/browserbase/stagehand/commit/a500de15cc010db3e42a7a05b7bcc92d2a9ad1d8) Thanks [@tkattkat](https://github.com/tkattkat)! - Remove deprecated provider option
+
+- [#1975](https://github.com/browserbase/stagehand/pull/1975) [`8f7192c`](https://github.com/browserbase/stagehand/commit/8f7192cee912268a125caf53bbaf2c6ba0f0947f) Thanks [@seanmcguire12](https://github.com/seanmcguire12)! - make file upload elements more explicit in page snapshot
+
 ## 3.2.1
 
 ### Patch Changes

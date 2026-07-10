@@ -1,15 +1,20 @@
 import path from "path";
-import type { Testcase, EvalInput } from "../types/evals.js";
+import type { Testcase, EvalInput, AgentModelEntry } from "../types/evals.js";
 import type { AvailableModel } from "@browserbasehq/stagehand";
 import { tasksConfig } from "../taskConfig.js";
-import { getCurrentDirPath } from "../runtimePaths.js";
-import { readJsonlFile, parseJsonlRows, applySampling } from "../utils.js";
+import { getPackageRootDir } from "../runtimePaths.js";
+import {
+  readJsonlFile,
+  parseJsonlRows,
+  applySampling,
+  normalizeAgentModelEntries,
+} from "../utils.js";
 
-export const buildOnlineMind2WebTestcases = (models: string[]): Testcase[] => {
-  const moduleDir = getCurrentDirPath();
+export const buildOnlineMind2WebTestcases = (
+  models: string[] | AgentModelEntry[],
+): Testcase[] => {
   const mind2webFilePath = path.join(
-    moduleDir,
-    "..",
+    getPackageRootDir(),
     "datasets",
     "onlineMind2Web",
     "onlineMind2Web.jsonl",
@@ -47,14 +52,32 @@ export const buildOnlineMind2WebTestcases = (models: string[]): Testcase[] => {
   }
 
   const candidates = parseJsonlRows(lines, isMind2WebRow);
-  const rows = applySampling(candidates, sampleCount, maxCases);
+
+  // EVAL_ONLINEMIND2WEB_IDS restricts the suite to exactly those task ids,
+  // preserving the order given and ignoring sampling / limit knobs.
+  const explicitIds = process.env.EVAL_ONLINEMIND2WEB_IDS
+    ? process.env.EVAL_ONLINEMIND2WEB_IDS.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : null;
+  let rows: Mind2WebRow[];
+  if (explicitIds && explicitIds.length > 0) {
+    const byId = new Map(candidates.map((r) => [r.task_id, r]));
+    rows = explicitIds
+      .map((id) => byId.get(id))
+      .filter((r): r is Mind2WebRow => Boolean(r));
+  } else {
+    rows = applySampling(candidates, sampleCount, maxCases);
+  }
 
   const allTestcases: Testcase[] = [];
-  for (const model of models) {
+  for (const modelEntry of normalizeAgentModelEntries(models)) {
     for (const row of rows) {
       const input: EvalInput = {
         name: "agent/onlineMind2Web",
-        modelName: model as AvailableModel,
+        modelName: modelEntry.modelName as AvailableModel,
+        agentMode: modelEntry.mode,
+        isCUA: modelEntry.mode === "cua",
         params: {
           task_id: row.task_id,
           confirmed_task: row.confirmed_task,
@@ -69,12 +92,15 @@ export const buildOnlineMind2WebTestcases = (models: string[]): Testcase[] => {
         input,
         name: input.name,
         tags: [
-          model,
+          modelEntry.modelName,
+          modelEntry.mode,
           "mind2web", // Simple dataset tag
         ],
         metadata: {
-          model: model as AvailableModel,
+          model: modelEntry.modelName as AvailableModel,
           test: `${input.name}:${row.task_id}`,
+          tier: "bench",
+          task: input.name,
           category: taskCategories[0] || "agent",
           categories: taskCategories,
           dataset: "onlineMind2Web",

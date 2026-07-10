@@ -21,6 +21,7 @@ ${userProvidedInstructions}`;
 export function buildExtractSystemPrompt(
   isUsingPrintExtractedDataTool: boolean = false,
   userProvidedInstructions?: string,
+  includeScreenshot: boolean = false,
 ): ChatMessage {
   const baseContent = `You are extracting content on behalf of a user.
   If a user asks you to extract a 'list' of information, or 'all' information, 
@@ -30,7 +31,9 @@ export function buildExtractSystemPrompt(
 1. An instruction
 2. `;
 
-  const contentDetail = `A list of DOM elements to extract from.`;
+  const contentDetail = includeScreenshot
+    ? `A list of DOM elements to extract from and a screenshot of the current viewport to extract from. Use them together to extract content from the page.`
+    : `A list of DOM elements to extract from.`;
 
   const instructions = `
 Print the exact text from the DOM elements with all symbols, characters, and endlines as is.
@@ -67,14 +70,29 @@ export function buildExtractUserPrompt(
   instruction: string,
   domElements: string,
   isUsingPrintExtractedDataTool: boolean = false,
+  screenshotDataUrl?: string,
 ): ChatMessage {
-  let content = `Instruction: ${instruction}
+  let content = screenshotDataUrl
+    ? `Instruction: ${instruction}
+DOM: ${domElements}
+Use the screenshot of the current viewport together with the accessibility tree to extract content from the page.`
+    : `Instruction: ${instruction}
 DOM: ${domElements}`;
 
   if (isUsingPrintExtractedDataTool) {
     content += `
 ONLY print the content using the print_extracted_data tool provided.
 ONLY print the content using the print_extracted_data tool provided.`;
+  }
+
+  if (screenshotDataUrl) {
+    return {
+      role: "user",
+      content: [
+        { type: "text", text: content },
+        { type: "image_url", image_url: { url: screenshotDataUrl } },
+      ],
+    };
   }
 
   return {
@@ -137,7 +155,9 @@ You will be given:
 2. a hierarchical accessibility tree showing the semantic structure of the page. The tree is a hybrid of the DOM and the accessibility tree.
 
 Return an array of elements that match the instruction if they exist, otherwise return an empty array.
-When returning elements, include the appropriate method from the supported actions list.${actionsString}${variablesString}. When choosing non-left click actions, provide right or middle as the argument.`;
+When returning elements, include the appropriate method from the supported actions list.${actionsString}${variablesString}. When choosing non-left click actions, provide right or middle as the argument.
+
+Each element in the accessibility tree has an ID in square brackets, like [0-18372]. The ID has two parts: frame ordinal and backend node ID. Always copy the complete ID exactly as shown inside the brackets into elementId, including the frame ordinal and hyphen. For example, if the tree shows [0-18372], return elementId "0-18372"; never return only "18372".`;
   const content = observeSystemPrompt.replace(/\s+/g, " ");
 
   return {
@@ -169,7 +189,7 @@ You will be given:
 1. a user defined instruction about what action to take
 2. a hierarchical accessibility tree showing the semantic structure of the page. The tree is a hybrid of the DOM and the accessibility tree.
 
-Return the element that matches the instruction if it exists. Otherwise, return an empty object.`;
+Return the element that matches the instruction if it exists. If no element on the page matches the instruction, set \`action\` to null. Do not fabricate or guess an element — empty strings or placeholder values for elementId/description/method are not acceptable.`;
   const content = actSystemPrompt.replace(/\s+/g, " ");
 
   return {
@@ -206,8 +226,8 @@ export function buildActPrompt(
   General Instructions: 
     Provide an action for this element such as ${supportedActions.join(", ")}. Remember that to users, buttons and links look the same in most cases.
     When choosing non-left click actions, provide right or middle as the argument
-    If the action is completely unrelated to a potential action to be taken on the page, return an empty object. 
-    ONLY return one action. If multiple actions are relevant, return the most relevant one. 
+    If the action is completely unrelated to a potential action to be taken on the page, or no matching element exists, set \`action\` to null. Do not fabricate or guess an element.
+    ONLY return one action. If multiple actions are relevant, return the most relevant one.
     If the user is asking to scroll to a position on the page, e.g., 'halfway' or 0.75, etc, you must return the argument formatted as the correct percentage, e.g., '50%' or '75%', etc.
     If the user is asking to scroll to the next chunk/previous chunk, choose the nextChunk/prevChunk method. No arguments are required here.
     If the action implies a key press, e.g., 'press enter', 'press a', 'press space', etc., always choose the press method with the appropriate key as argument — e.g. 'a', 'Enter', 'Space'. Do not choose a click action on an on-screen keyboard. Capitalize the first character like 'Enter', 'Tab', 'Escape' only for special keys. 
@@ -246,8 +266,8 @@ export function buildStepTwoPrompt(
   
   General Instructions: 
   Provide an action for this element such as ${supportedActions.join(", ")}. Remember that to users, buttons and links look the same in most cases.
-  If the action is completely unrelated to a potential action to be taken on the page, return an empty object. 
-  ONLY return one action. If multiple actions are relevant, return the most relevant one. 
+  If the action is completely unrelated to a potential action to be taken on the page, or no matching element exists, set \`action\` to null. Do not fabricate or guess an element.
+  ONLY return one action. If multiple actions are relevant, return the most relevant one.
   If the user is asking to scroll to a position on the page, e.g., 'halfway' or 0.75, etc, you must return the argument formatted as the correct percentage, e.g., '50%' or '75%', etc.
   If the user is asking to scroll to the next chunk/previous chunk, choose the nextChunk/prevChunk method. No arguments are required here.
   If the action implies a key press, e.g., 'press enter', 'press a', 'press space', etc., always choose the press method with the appropriate key as argument — e.g. 'a', 'Enter', 'Space'. Do not choose a click action on an on-screen keyboard. Capitalize the first character like 'Enter', 'Tab', 'Escape' only for special keys. 

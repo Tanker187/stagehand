@@ -9,6 +9,7 @@ permissions:
   contents: write
   pull-requests: write
   id-token: write
+  packages: write
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -18,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
@@ -27,13 +28,17 @@ jobs:
           use-prebuilt-artifacts: "false"
 
       - name: Configure npm registry for Trusted Publishing
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 20.x
           registry-url: "https://registry.npmjs.org"
 
       - name: Update npm for Trusted Publishing
-        run: npm install -g npm@latest
+        # Trusted Publishing (OIDC) needs npm >= 11.5.1; npm 12+ requires
+        # node >= 22 and this job runs node 20, so pin the last known-good
+        # 11.x exactly. Unpin (back to npm@latest) when the job moves to
+        # node >= 22.
+        run: npm install -g npm@11.18.0
 
       - name: Run Lint & Build
         run: pnpm exec turbo run lint && pnpm exec turbo run build
@@ -77,7 +82,7 @@ jobs:
 
       - name: Create Release Pull Request or Publish to npm
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@63a615b9cd06ba9a3e6d13796c7fbcb080a60a0b # v1.8.0
         if: steps.check_changesets.outputs.should_run == 'true'
         with:
           publish: pnpm run release
@@ -90,7 +95,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check if browse-cli publish is needed
+      - name: Check if browse publish is needed
         if: github.ref == 'refs/heads/main'
         id: browse_cli
         run: |
@@ -98,7 +103,7 @@ jobs:
           git checkout ${{ github.sha }}
 
           if git diff --quiet ${{ github.sha }}^ ${{ github.sha }} -- packages/cli/package.json; then
-            echo "browse-cli version did not change on this push."
+            echo "browse version did not change on this push."
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -108,21 +113,21 @@ jobs:
           echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
 
           if [ "$OLD_VERSION" = "$NEW_VERSION" ]; then
-            echo "browse-cli version did not change on this push."
+            echo "browse version did not change on this push."
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "should_publish=true" >> "$GITHUB_OUTPUT"
 
-          if npm view "@browserbasehq/browse-cli@${NEW_VERSION}" version >/dev/null 2>&1; then
-            echo "browse-cli ${NEW_VERSION} is already published."
+          if npm view "browse@${NEW_VERSION}" version >/dev/null 2>&1; then
+            echo "browse ${NEW_VERSION} is already published."
             echo "already_published=true" >> "$GITHUB_OUTPUT"
           else
             echo "already_published=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish browse-cli to npm
+      - name: Publish browse to npm
         if: steps.browse_cli.outputs.should_publish == 'true' && steps.browse_cli.outputs.already_published != 'true'
         run: |
           cd packages/cli
@@ -132,10 +137,10 @@ jobs:
           TARBALL=$(pnpm pack --json --pack-destination "$PACK_DIR" | node -pe "JSON.parse(require('fs').readFileSync(0, 'utf8')).filename")
           npm publish "$TARBALL" --provenance --access public --tag latest
 
-      - name: Tag browse-cli release
-        if: github.ref == 'refs/heads/main' && steps.browse_cli.outputs.should_publish == 'true'
+      - name: Tag browse release
+        if: github.ref == 'refs/heads/main' && steps.browse_cli.outputs.should_publish == 'true' && steps.browse_cli.outputs.already_published != 'true'
         run: |
-          TAG="@browserbasehq/browse-cli@${{ steps.browse_cli.outputs.version }}"
+          TAG="browse@${{ steps.browse_cli.outputs.version }}"
           if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
             echo "Tag ${TAG} already exists."
             exit 0
@@ -146,12 +151,43 @@ jobs:
           git tag "$TAG"
           git push origin "$TAG"
 
-      - name: Publish browse-cli canary
+      - name: Set up QEMU
+        if: steps.browse_cli.outputs.should_publish == 'true' && steps.browse_cli.outputs.already_published != 'true'
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+
+      - name: Set up Docker Buildx
+        if: steps.browse_cli.outputs.should_publish == 'true' && steps.browse_cli.outputs.already_published != 'true'
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Log in to GitHub Container Registry
+        if: steps.browse_cli.outputs.should_publish == 'true' && steps.browse_cli.outputs.already_published != 'true'
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push browse image to GHCR
+        if: steps.browse_cli.outputs.should_publish == 'true' && steps.browse_cli.outputs.already_published != 'true'
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: packages/cli
+          file: packages/cli/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          build-args: |
+            BROWSE_VERSION=${{ steps.browse_cli.outputs.version }}
+          tags: |
+            ghcr.io/browserbase/browse:${{ steps.browse_cli.outputs.version }}
+            ghcr.io/browserbase/browse:latest
+
+      - name: Publish browse canary
         if: github.ref == 'refs/heads/main' && steps.browse_cli.outputs.should_publish != 'true'
         run: |
-          # Skip if no browse-cli files changed in this push
+          # Skip if no browse files changed in this push
           if git diff --quiet ${{ github.sha }}^ ${{ github.sha }} -- packages/cli/; then
-            echo "No browse-cli changes in this push, skipping canary."
+            echo "No browse changes in this push, skipping canary."
             exit 0
           fi
 
@@ -160,8 +196,8 @@ jobs:
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           CANARY_VERSION="${BASE_VERSION}-alpha-${SHORT_SHA}"
 
-          if npm view "@browserbasehq/browse-cli@${CANARY_VERSION}" version >/dev/null 2>&1; then
-            echo "browse-cli canary ${CANARY_VERSION} is already published."
+          if npm view "browse@${CANARY_VERSION}" version >/dev/null 2>&1; then
+            echo "browse canary ${CANARY_VERSION} is already published."
             exit 0
           fi
 
@@ -178,7 +214,7 @@ jobs:
           TARBALL=$(pnpm pack --json --pack-destination "$PACK_DIR" | node -pe "JSON.parse(require('fs').readFileSync(0, 'utf8')).filename")
           npm publish "$TARBALL" --provenance --access public --tag alpha
 
-          echo "Published @browserbasehq/browse-cli@${CANARY_VERSION}"
+          echo "Published browse@${CANARY_VERSION}"
 
       - name: Publish Canary
         if: github.ref == 'refs/heads/main'

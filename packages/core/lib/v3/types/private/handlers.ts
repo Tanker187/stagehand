@@ -17,6 +17,8 @@ export interface ExtractHandlerParams<T extends StagehandZodSchema> {
   model?: ModelConfiguration;
   timeout?: number;
   selector?: string;
+  ignoreSelectors?: string[];
+  screenshot?: boolean;
   page: Page;
 }
 
@@ -26,6 +28,7 @@ export interface ObserveHandlerParams {
   variables?: Variables;
   timeout?: number;
   selector?: string;
+  ignoreSelectors?: string[];
   page: Page;
 }
 

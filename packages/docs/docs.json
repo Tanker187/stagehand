@@ -15,7 +15,9 @@
       "og:site_name": "Stagehand Docs"
     }
   },
-  "openapi": "https://app.stainless.com/api/spec/documented/stagehand/openapi.documented.yml",
+  "api": {
+    "openapi": "https://app.stainless.com/api/spec/documented/stagehand/openapi.documented.yml"
+  },
   "navigation": {
     "versions": [
       {
@@ -44,6 +46,7 @@
                   "v3/basics/act",
                   "v3/basics/extract",
                   "v3/basics/observe",
+                  "v3/basics/webmcp",
                   "v3/basics/evals"
                 ]
               },
@@ -126,6 +129,7 @@
                   "v3/references/extract",
                   "v3/references/observe",
                   "v3/references/context",
+                  "v3/references/clipboard",
                   "v3/references/page",
                   "v3/references/locator",
                   "v3/references/deeplocator",

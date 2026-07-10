@@ -50,6 +50,14 @@ if (fs.existsSync(distConfigPath)) {
         ...existing.defaults,
       };
     }
+    // Preserve the first-run welcome marker across rebuilds so a contributor
+    // who's already seen the welcome on the dist path doesn't see it again
+    // after every `pnpm run build:cli`. If the source has _meta and dist
+    // doesn't (fresh dist install), the source value is inherited via the
+    // sourceConfig literal — already correct.
+    if (existing._meta) {
+      sourceConfig._meta = { ...sourceConfig._meta, ...existing._meta };
+    }
   } catch {
     // invalid existing config – overwrite entirely
   }
@@ -61,14 +69,3 @@ fs.writeFileSync(
   '{\n  "type": "module"\n}\n',
 );
 fs.chmodSync(`${repoRoot}/packages/evals/dist/cli/cli.js`, 0o755);
-
-/* ── auto-link the `evals` binary globally ── */
-const link = spawnSync("npm", ["link", "--force"], {
-  stdio: "inherit",
-  cwd: `${repoRoot}/packages/evals`,
-});
-if (link.status !== 0) {
-  console.warn(
-    "⚠  npm link failed (non-fatal) – you can run `npm link` manually from packages/evals",
-  );
-}

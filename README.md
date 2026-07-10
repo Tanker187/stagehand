@@ -43,18 +43,6 @@ If you're looking for the Python implementation, you can find it
 <a href="https://github.com/browserbase/stagehand-python"> here</a>
 </p>
 
-<div align="center" style="display: flex; align-items: center; justify-content: center; gap: 4px; margin-bottom: 0;">
-  <b>Vibe code</b>
-  <span style="font-size: 1.05em;"> Stagehand with </span>
-  <a href="https://director.ai" style="display: flex; align-items: center;">
-    <span>Director</span>
-  </a>
-  <span> </span>
-  <picture>
-    <img alt="Director" src="media/director_icon.svg" width="25" />
-  </picture>
-</div>
-
 ## What is Stagehand?
 
 Stagehand is a browser automation framework used to control web browsers with natural language and code. By combining the power of AI with the precision of code, Stagehand makes web automation flexible, maintainable, and actually reliable.
@@ -127,13 +115,17 @@ nano .env # Edit the .env file to add API keys
 
 ### Installing from a branch
 
-You can install and build Stagehand directly from a github branch using [gitpkg](https://github.com/EqualMa/gitpkg)
+To install Stagehand directly from a GitHub branch, install the core package subdirectory:
 
-In your project's `package.json` set:
-```json
-"@browserbasehq/stagehand": "https://gitpkg.now.sh/browserbase/stagehand/packages/core?<branchName>",
+```bash
+pnpm add "github:browserbase/stagehand#<branchName>&path:/packages/core"
 ```
 
+Or set it in your project's `package.json`:
+
+```json
+"@browserbasehq/stagehand": "github:browserbase/stagehand#<branchName>&path:/packages/core"
+```
 
 ## Contributing
 
@@ -141,6 +133,7 @@ In your project's `package.json` set:
 > We highly value contributions to Stagehand! For questions or support, please join our [Discord community](https://stagehand.dev/discord).
 
 At a high level, we're focused on improving reliability, extensibility, speed, and cost in that order of priority. If you're interested in contributing, **bug fixes and small improvements are the best way to get started**. For more involved features, we strongly recommend reaching out to [Miguel Gonzalez](https://x.com/miguel_gonzf) or [Paul Klein](https://x.com/pk_iv) in our [Discord community](https://stagehand.dev/discord) before starting to ensure that your contribution aligns with our goals.
+
 
 <!-- For more information, please see our [Contributing Guide](https://docs.stagehand.dev/examples/contributing). -->
 

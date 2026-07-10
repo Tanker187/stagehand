@@ -3,17 +3,49 @@ import * as Stagehand from "@browserbasehq/stagehand";
 
 describe("LLM and Agents public API types", () => {
   describe("ModelConfiguration", () => {
-    it("accepts Vertex headers in model config", () => {
-      const googleConfig = {
-        modelName: "google/gemini-3-flash-preview",
-        project: "test-project",
-        location: "global",
+    it("accepts Vertex provider options in model config", () => {
+      const vertexConfig = {
+        provider: "vertex",
+        modelName: "vertex/gemini-3-flash-preview",
         headers: {
           "X-Goog-Priority": "high",
         },
+        auth: {
+          type: "googleServiceAccount",
+          credentials: {
+            client_email: "vertex@example.iam.gserviceaccount.com",
+            private_key:
+              "-----BEGIN PRIVATE KEY-----\\ntest\\n-----END PRIVATE KEY-----",
+          },
+        },
+        providerOptions: {
+          vertex: {
+            project: "test-project",
+            location: "global",
+          },
+        },
       } satisfies Stagehand.ModelConfiguration;
 
-      void googleConfig;
+      void vertexConfig;
+    });
+
+    it("accepts Azure provider options in model config", () => {
+      const azureConfig = {
+        provider: "azure",
+        modelName: "azure/gpt-4.1-mini",
+        auth: {
+          type: "azureEntraId",
+          token: "test-entra-token",
+        },
+        providerOptions: {
+          azure: {
+            resourceName: "test-azure-resource",
+            apiVersion: "2024-10-01-preview",
+          },
+        },
+      } satisfies Stagehand.ModelConfiguration;
+
+      void azureConfig;
     });
   });
 
@@ -39,14 +71,21 @@ describe("LLM and Agents public API types", () => {
     const expectedModels = [
       "openai/computer-use-preview",
       "openai/computer-use-preview-2025-03-11",
+      "openai/gpt-5.4",
+      "openai/gpt-5.4-mini",
+      "openai/gpt-5.5",
       "anthropic/claude-opus-4-5-20251101",
       "anthropic/claude-opus-4-6",
+      "anthropic/claude-opus-4-8",
       "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-haiku-4-5",
       "anthropic/claude-haiku-4-5-20251001",
       "anthropic/claude-sonnet-4-20250514",
       "anthropic/claude-sonnet-4-5-20250929",
+      "anthropic/claude-fable-5",
       "google/gemini-2.5-computer-use-preview-10-2025",
       "google/gemini-3-flash-preview",
+      "google/gemini-3.5-flash",
       "google/gemini-3-pro-preview",
       "microsoft/fara-7b",
     ] as const;
@@ -56,6 +95,12 @@ describe("LLM and Agents public API types", () => {
         (typeof expectedModels)[number]
       >();
       void expectedModels; // Mark as used to satisfy ESLint
+    });
+
+    it("includes Claude Opus 4.8 at runtime", () => {
+      expect(Stagehand.AVAILABLE_CUA_MODELS).toContain(
+        "anthropic/claude-opus-4-8",
+      );
     });
   });
 
@@ -126,7 +171,9 @@ describe("LLM and Agents public API types", () => {
         ) => Promise<unknown>;
         setViewport: (width: number, height: number) => void;
         setCurrentUrl: (url: string) => void;
-        setScreenshotProvider: (provider: () => Promise<string>) => void;
+        setScreenshotProvider: (
+          provider: () => Promise<Stagehand.ScreenshotProviderResult>,
+        ) => void;
         setActionHandler: (
           handler: (action: Stagehand.AgentAction) => Promise<void>,
         ) => void;
@@ -269,6 +316,12 @@ describe("LLM and Agents public API types", () => {
       expectTypeOf<
         typeof Stagehand.modelToAgentProviderMap
       >().toExtend<ExpectedModelToAgentProviderMap>();
+    });
+
+    it("routes Claude Opus 4.8 to Anthropic", () => {
+      expect(Stagehand.modelToAgentProviderMap["claude-opus-4-8"]).toBe(
+        "anthropic",
+      );
     });
   });
 

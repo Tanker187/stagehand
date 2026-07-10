@@ -42,16 +42,6 @@ export async function a11yForFrame(
     }>("Accessibility.getFullAXTree"));
   }
 
-  const urlMap: Record<string, string> = {};
-  for (const n of nodes) {
-    const be = n.backendDOMNodeId;
-    if (typeof be !== "number") continue;
-    const url = extractUrlFromAXNode(n);
-    if (!url) continue;
-    const enc = opts.encode(be);
-    urlMap[enc] = url;
-  }
-
   let scopeApplied = false;
   const nodesForOutline = await (async () => {
     const sel = opts.focusSelector?.trim();
@@ -92,7 +82,22 @@ export async function a11yForFrame(
     }
   })();
 
-  const decorated = decorateRoles(nodesForOutline, opts);
+  const filteredNodes = nodesForOutline.filter((node) => {
+    const be = node.backendDOMNodeId;
+    return typeof be !== "number" || !opts.isIgnoredBackendNode?.(be);
+  });
+
+  const urlMap: Record<string, string> = {};
+  for (const n of filteredNodes) {
+    const be = n.backendDOMNodeId;
+    if (typeof be !== "number") continue;
+    const url = extractUrlFromAXNode(n);
+    if (!url) continue;
+    const enc = opts.encode(be);
+    urlMap[enc] = url;
+  }
+
+  const decorated = decorateRoles(filteredNodes, opts);
   const { tree } = await buildHierarchicalTree(decorated, opts);
 
   const simplified = tree.map((n) => formatTreeLine(n)).join("\n");
@@ -130,11 +135,19 @@ export function decorateRoles(
         : `scrollable${role ? `, ${role}` : ""}`;
     }
 
+    // File inputs typically get role "button" from Chrome's AX tree;
+    // override so they appear as "input, file" in the outline.
+    if (tag === "input, file") {
+      role = tag;
+    }
+
     return {
       role,
       name: n.name?.value,
       description: n.description?.value,
       value: n.value?.value,
+      selected: extractBooleanProperty(n, "selected"),
+      checked: extractBooleanProperty(n, "checked"),
       nodeId: n.nodeId,
       backendDOMNodeId: n.backendDOMNodeId,
       parentId: n.parentId,
@@ -222,6 +235,28 @@ export function extractUrlFromAXNode(
   const urlProp = props.find((p) => p.name === "url");
   const value = urlProp?.value?.value;
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+function toBooleanValue(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  if (typeof value === "string") {
+    const normalized = value.toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return undefined;
+}
+
+function extractBooleanProperty(
+  node: Protocol.Accessibility.AXNode,
+  propertyName: string,
+): boolean | undefined {
+  const value = node.properties?.find((p) => p.name === propertyName)?.value
+    ?.value;
+  return toBooleanValue(value);
 }
 
 export function removeRedundantStaticTextChildren(

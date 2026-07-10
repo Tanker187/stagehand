@@ -53,6 +53,8 @@ export const publicErrorTypes = {
   StreamingCallbacksInNonStreamingModeError:
     Stagehand.StreamingCallbacksInNonStreamingModeError,
   StagehandSnapshotError: Stagehand.StagehandSnapshotError,
+  StagehandUnsupportedBrowserFeatureError:
+    Stagehand.StagehandUnsupportedBrowserFeatureError,
   TimeoutError: Stagehand.TimeoutError,
   UnsupportedAISDKModelProviderError:
     Stagehand.UnsupportedAISDKModelProviderError,
@@ -66,6 +68,7 @@ export const publicErrorTypes = {
   UnderstudyCommandException: Stagehand.UnderstudyCommandException,
   StagehandSetExtraHTTPHeadersError:
     Stagehand.StagehandSetExtraHTTPHeadersError,
+  StagehandSetDomainPolicyError: Stagehand.StagehandSetDomainPolicyError,
 } as const;
 
 const errorTypes = Object.keys(publicErrorTypes) as Array<

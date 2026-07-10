@@ -19,6 +19,10 @@ import { processMessages } from "../agent/utils/messageProcessing.js";
 import { LLMClient } from "../llm/LLMClient.js";
 import { FlowLogger } from "../flowlogger/FlowLogger.js";
 import {
+  anthropicAdaptiveThinkingOptions,
+  anthropicFallbacksOptions,
+} from "../llm/anthropicOptions.js";
+import {
   AgentExecuteOptions,
   AgentStreamExecuteOptions,
   AgentExecuteOptionsBase,
@@ -31,6 +35,8 @@ import {
   AgentModelConfig,
   Variables,
 } from "../types/public/agent.js";
+import type { AgentEvidenceCallback } from "../types/public/agentEvidenceEvents.js";
+import { HYBRID_CAPABLE_MODEL_PATTERNS } from "../types/private/agent.js";
 import { V3FunctionName } from "../types/public/methods.js";
 import { mapToolResultToActions } from "../agent/utils/actionMapping.js";
 import {
@@ -41,6 +47,12 @@ import {
 } from "../types/public/sdkErrors.js";
 import { handleDoneToolCall } from "../agent/utils/handleDoneToolCall.js";
 import {
+  captureProbeEvidence,
+  emitPostStepProbeEvidence,
+} from "../agent/utils/postStepProbeEvidence.js";
+import { wrapEvidenceCallback } from "../agent/utils/wrapEvidenceCallback.js";
+import { inferToolOutput } from "../agent/utils/toolOutputEvidence.js";
+import {
   CaptchaSolver,
   CAPTCHA_SOLVED_MSG,
   CAPTCHA_ERRORED_MSG,
@@ -48,6 +60,19 @@ import {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+type FinalAnswerDraft = {
+  message: string;
+  output?: Record<string, unknown>;
+};
+
+interface StepHandlerOptions {
+  userCallback?:
+    | GenerateTextOnStepFinishCallback<ToolSet>
+    | StreamTextOnStepFinishCallback<ToolSet>;
+  evidenceCallback?: AgentEvidenceCallback;
+  onFinalAnswer?: (answer: FinalAnswerDraft) => void;
 }
 
 /**
@@ -72,6 +97,26 @@ function prependSystemMessage(
   ];
 }
 
+/**
+ * Request-level providerOptions for the hybrid/DOM agent loop.
+ *
+ * Anthropic models that support adaptive thinking (Claude 4.6+) get it
+ * enabled here — previously the hybrid path sent no thinking config for
+ * Anthropic at all. Fable 5 additionally opts into the API's server-side
+ * refusal fallback.
+ */
+function buildAgentProviderOptions(modelId: string, thinkingEffort?: string) {
+  const anthropic = {
+    ...(anthropicAdaptiveThinkingOptions(modelId, thinkingEffort) ?? {}),
+    ...(anthropicFallbacksOptions(modelId) ?? {}),
+  };
+  return {
+    google: { mediaResolution: "MEDIA_RESOLUTION_HIGH" },
+    openai: { store: false },
+    ...(Object.keys(anthropic).length > 0 ? { anthropic } : {}),
+  };
+}
+
 export class V3AgentHandler {
   private v3: V3;
   private logger: (message: LogLine) => void;
@@ -81,6 +126,7 @@ export class V3AgentHandler {
   private mcpTools?: ToolSet;
   private mode: AgentToolMode;
   private captchaAutoSolveEnabled: boolean;
+  private thinkingEffort?: string;
 
   constructor(
     v3: V3,
@@ -91,6 +137,7 @@ export class V3AgentHandler {
     mcpTools?: ToolSet,
     mode?: AgentToolMode,
     captchaAutoSolveEnabled?: boolean,
+    thinkingEffort?: string,
   ) {
     this.v3 = v3;
     this.logger = logger;
@@ -100,6 +147,7 @@ export class V3AgentHandler {
     this.mcpTools = mcpTools;
     this.mode = mode ?? "dom";
     this.captchaAutoSolveEnabled = captchaAutoSolveEnabled ?? false;
+    this.thinkingEffort = thinkingEffort;
   }
 
   private async prepareAgent(
@@ -163,11 +211,10 @@ export class V3AgentHandler {
         },
       });
 
-      if (
-        this.mode === "hybrid" &&
-        !baseModel.modelId.includes("gemini-3-flash") &&
-        !baseModel.modelId.includes("claude")
-      ) {
+      const isHybridCapable = HYBRID_CAPABLE_MODEL_PATTERNS.some((pattern) =>
+        baseModel.modelId.includes(pattern),
+      );
+      if (this.mode === "hybrid" && !isHybridCapable) {
         this.logger({
           category: "agent",
           message: `Warning: "${baseModel.modelId}" may not perform well in hybrid mode. See recommended models: https://docs.stagehand.dev/v3/basics/agent#hybrid-mode`,
@@ -244,9 +291,7 @@ export class V3AgentHandler {
 
   private createStepHandler(
     state: AgentState,
-    userCallback?:
-      | GenerateTextOnStepFinishCallback<ToolSet>
-      | StreamTextOnStepFinishCallback<ToolSet>,
+    { userCallback, evidenceCallback, onFinalAnswer }: StepHandlerOptions,
   ) {
     return async (event: StepResult<ToolSet>) => {
       this.logger({
@@ -254,6 +299,8 @@ export class V3AgentHandler {
         message: `Step finished: ${event.finishReason}`,
         level: 2,
       });
+
+      let lastFinalAnswer: FinalAnswerDraft | undefined;
 
       if (event.toolCalls && event.toolCalls.length > 0) {
         for (let i = 0; i < event.toolCalls.length; i++) {
@@ -279,6 +326,13 @@ export class V3AgentHandler {
                 ? `${allReasoning} ${doneReasoning}`.trim()
                 : allReasoning || "Task completed successfully";
             }
+            lastFinalAnswer = {
+              message: state.finalMessage,
+              output:
+                typeof args?.output === "object" && args?.output !== null
+                  ? (args.output as Record<string, unknown>)
+                  : undefined,
+            };
           }
           const mappedActions = mapToolResultToActions({
             toolCallName: toolCall.toolName,
@@ -292,8 +346,35 @@ export class V3AgentHandler {
             action.timestamp = Date.now();
             state.actions.push(action);
           }
+
+          await evidenceCallback?.({
+            type: "step_finished",
+            actionName: toolCall.toolName,
+            actionArgs:
+              typeof args === "object" && args !== null
+                ? (args as Record<string, unknown>)
+                : {},
+            reasoning: event.text ?? "",
+            toolOutput: inferToolOutput(toolResult),
+          });
         }
         state.currentPageUrl = (await this.v3.context.awaitActivePage()).url();
+
+        // Harness probe — one screenshot / a11y snapshot per AI SDK step.
+        // The recorder applies the probe to every step_finished received
+        // since the previous probe, so a multi-tool turn shares the same
+        // post-turn observation.
+        await emitPostStepProbeEvidence({
+          v3: this.v3,
+          url: state.currentPageUrl,
+          evidenceCallback,
+          logger: this.logger,
+          warningMessage: "Warning: harness probe failed",
+        });
+      }
+
+      if (lastFinalAnswer) {
+        onFinalAnswer?.(lastFinalAnswer);
       }
 
       if (userCallback) {
@@ -321,6 +402,7 @@ export class V3AgentHandler {
       completed: false,
       currentPageUrl: "",
     };
+    let finalAnswerFromDoneTool: FinalAnswerDraft | undefined;
 
     let messages: ModelMessage[] = [];
     let captchaSolver: CaptchaSolver | undefined;
@@ -368,24 +450,35 @@ export class V3AgentHandler {
         }
       }
 
+      const evidenceCallback = wrapEvidenceCallback(
+        callbacks?.onEvidence,
+        this.logger,
+      );
+
       const result = await this.llmClient.generateText({
         model: wrappedModel,
         messages: prependSystemMessage(systemPrompt, messages),
+        allowSystemInMessages: true,
         tools: allTools,
         stopWhen: (result) => this.handleStop(result, maxSteps),
-        temperature: 1,
         toolChoice: "auto",
 
         prepareStep: this.createPrepareStep(
           callbacks?.prepareStep,
           captchaSolver,
         ),
-        onStepFinish: this.createStepHandler(state, callbacks?.onStepFinish),
+        onStepFinish: this.createStepHandler(state, {
+          userCallback: callbacks?.onStepFinish,
+          evidenceCallback,
+          onFinalAnswer: (answer) => {
+            finalAnswerFromDoneTool = answer;
+          },
+        }),
         abortSignal: preparedOptions.signal,
-        providerOptions: {
-          google: { mediaResolution: "MEDIA_RESOLUTION_HIGH" },
-          openai: { store: false },
-        },
+        providerOptions: buildAgentProviderOptions(
+          wrappedModel.modelId,
+          this.thinkingEffort,
+        ),
       });
 
       const allMessages = [...messages, ...(result.response?.messages || [])];
@@ -397,6 +490,15 @@ export class V3AgentHandler {
         preparedOptions.output,
         this.logger,
       );
+      const output = doneResult.output ?? finalAnswerFromDoneTool?.output;
+      await this.emitFinalEvidence(
+        state,
+        {
+          message: state.finalMessage,
+          output,
+        },
+        evidenceCallback,
+      );
 
       return this.consolidateMetricsAndResult(
         startTime,
@@ -404,7 +506,7 @@ export class V3AgentHandler {
         doneResult.messages,
         result,
         maxSteps,
-        doneResult.output,
+        output,
       );
     } catch (error) {
       // Re-throw validation errors that should propagate to the caller
@@ -450,6 +552,7 @@ export class V3AgentHandler {
     // Highlight cursor defaults to true for hybrid mode, can be overridden
     const shouldHighlightCursor =
       streamOptions?.highlightCursor ?? this.mode === "hybrid";
+    let finalAnswerFromDoneTool: FinalAnswerDraft | undefined;
 
     const {
       options,
@@ -504,20 +607,31 @@ export class V3AgentHandler {
       rejectResult(error);
     };
 
+    const evidenceCallback = wrapEvidenceCallback(
+      callbacks?.onEvidence,
+      this.logger,
+    );
+
     let streamResult: ReturnType<typeof this.llmClient.streamText>;
     try {
       streamResult = this.llmClient.streamText({
         model: wrappedModel,
         messages: prependSystemMessage(systemPrompt, messages),
+        allowSystemInMessages: true,
         tools: allTools,
         stopWhen: (result) => this.handleStop(result, maxSteps),
-        temperature: 1,
         toolChoice: "auto",
         prepareStep: this.createPrepareStep(
           callbacks?.prepareStep,
           captchaSolver,
         ),
-        onStepFinish: this.createStepHandler(state, callbacks?.onStepFinish),
+        onStepFinish: this.createStepHandler(state, {
+          userCallback: callbacks?.onStepFinish,
+          evidenceCallback,
+          onFinalAnswer: (answer) => {
+            finalAnswerFromDoneTool = answer;
+          },
+        }),
         onError: (event) => {
           captchaSolver?.dispose();
           if (callbacks?.onError) {
@@ -543,17 +657,29 @@ export class V3AgentHandler {
             options.instruction,
             options.output,
             this.logger,
-          ).then((doneResult) => {
-            const result = this.consolidateMetricsAndResult(
-              startTime,
-              state,
-              doneResult.messages,
-              event,
-              maxSteps,
-              doneResult.output,
-            );
-            resolveResult(result);
-          });
+          )
+            .then(async (doneResult) => {
+              const output =
+                doneResult.output ?? finalAnswerFromDoneTool?.output;
+              await this.emitFinalEvidence(
+                state,
+                {
+                  message: state.finalMessage,
+                  output,
+                },
+                evidenceCallback,
+              );
+              const result = this.consolidateMetricsAndResult(
+                startTime,
+                state,
+                doneResult.messages,
+                event,
+                maxSteps,
+                output,
+              );
+              resolveResult(result);
+            })
+            .catch(handleError);
         },
         onAbort: (event) => {
           captchaSolver?.dispose();
@@ -567,10 +693,10 @@ export class V3AgentHandler {
           rejectResult(new AgentAbortError(reason));
         },
         abortSignal: options.signal,
-        providerOptions: {
-          google: { mediaResolution: "MEDIA_RESOLUTION_HIGH" },
-          openai: { store: false },
-        },
+        providerOptions: buildAgentProviderOptions(
+          wrappedModel.modelId,
+          this.thinkingEffort,
+        ),
       });
     } catch (error) {
       captchaSolver?.dispose();
@@ -580,6 +706,26 @@ export class V3AgentHandler {
     const agentStreamResult = streamResult as AgentStreamResult;
     agentStreamResult.result = resultPromise;
     return agentStreamResult;
+  }
+
+  private async emitFinalEvidence(
+    state: AgentState,
+    finalAnswer: { message: string; output?: Record<string, unknown> },
+    evidenceCallback?: AgentEvidenceCallback,
+  ): Promise<void> {
+    if (!evidenceCallback) return;
+
+    const observation = await captureProbeEvidence({
+      v3: this.v3,
+      url: state.currentPageUrl,
+      logger: this.logger,
+      warningMessage: "Warning: final harness probe failed",
+    });
+    await evidenceCallback({
+      type: "final_answer",
+      ...finalAnswer,
+      observation,
+    });
   }
 
   private consolidateMetricsAndResult(
@@ -687,13 +833,33 @@ export class V3AgentHandler {
   ): Promise<{ messages: ModelMessage[]; output?: Record<string, unknown> }> {
     if (state.completed) return { messages };
 
-    const doneResult = await handleDoneToolCall({
-      model,
-      inputMessages: messages,
-      instruction,
-      outputSchema,
-      logger,
-    });
+    let doneResult: Awaited<ReturnType<typeof handleDoneToolCall>>;
+    try {
+      doneResult = await handleDoneToolCall({
+        model,
+        inputMessages: messages,
+        instruction,
+        outputSchema,
+        logger,
+      });
+    } catch (error) {
+      // The forced "done" call only summarizes the run, so its failure must not
+      // fail a run whose work already completed (e.g. a provider rejecting the
+      // re-submitted history). Warn and synthesize a completion. We log only the
+      // message, not the cause — the cause embeds the full history (base64
+      // images included) and would bloat the log.
+      logger?.({
+        category: "agent",
+        level: 1,
+        message: `Agent "done" finalization call failed; using run summary instead: ${getErrorMessage(error)}`,
+      });
+      state.completed = true;
+      state.finalMessage =
+        state.finalMessage ||
+        state.collectedReasoning.join(" ").trim() ||
+        "Task execution completed";
+      return { messages };
+    }
 
     state.completed = doneResult.taskComplete;
     state.finalMessage = doneResult.reasoning;

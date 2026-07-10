@@ -18,6 +18,7 @@ import type {
 } from "./v3/zodCompat.js";
 import { SupportedUnderstudyAction } from "./v3/types/private/handlers.js";
 import type { Variables } from "./v3/types/public/agent.js";
+import { StagehandInvalidArgumentError } from "./v3/types/public/sdkErrors.js";
 
 // Re-export for backward compatibility
 export type { LLMParsedResponse, LLMUsage } from "./v3/llm/LLMClient.js";
@@ -38,6 +39,7 @@ export async function extract<T extends StagehandZodObject>({
   logger,
   userProvidedInstructions,
   logInferenceToFile = false,
+  screenshot,
 }: {
   instruction: string;
   domElements: string;
@@ -46,6 +48,7 @@ export async function extract<T extends StagehandZodObject>({
   userProvidedInstructions?: string;
   logger: (message: LogLine) => void;
   logInferenceToFile?: boolean;
+  screenshot?: Buffer;
 }) {
   const metadataSchema = z.object({
     progress: z
@@ -64,11 +67,27 @@ export async function extract<T extends StagehandZodObject>({
   type MetadataResponse = z.infer<typeof metadataSchema>;
 
   const isUsingAnthropic = llmClient.type === "anthropic";
-  const isGPT5 = llmClient.modelName.includes("gpt-5"); // TODO: remove this as we update support for gpt-5 configuration options
+  if (screenshot && llmClient.type !== "aisdk") {
+    throw new StagehandInvalidArgumentError(
+      "extract({ screenshot: true }) is only supported with AI SDK clients.",
+    );
+  }
+  const screenshotDataUrl = screenshot
+    ? `data:image/png;base64,${screenshot.toString("base64")}`
+    : undefined;
 
   const extractCallMessages: ChatMessage[] = [
-    buildExtractSystemPrompt(isUsingAnthropic, userProvidedInstructions),
-    buildExtractUserPrompt(instruction, domElements, isUsingAnthropic),
+    buildExtractSystemPrompt(
+      isUsingAnthropic,
+      userProvidedInstructions,
+      Boolean(screenshotDataUrl),
+    ),
+    buildExtractUserPrompt(
+      instruction,
+      domElements,
+      isUsingAnthropic,
+      screenshotDataUrl,
+    ),
   ];
 
   let extractCallFile = "";
@@ -95,7 +114,6 @@ export async function extract<T extends StagehandZodObject>({
           schema,
           name: "Extraction",
         },
-        temperature: isGPT5 ? 1 : 0.1,
         top_p: 1,
         frequency_penalty: 0,
         presence_penalty: 0,
@@ -162,7 +180,6 @@ export async function extract<T extends StagehandZodObject>({
           name: "Metadata",
           schema: metadataSchema,
         },
-        temperature: isGPT5 ? 1 : 0.1,
         top_p: 1,
         frequency_penalty: 0,
         presence_penalty: 0,
@@ -257,8 +274,6 @@ export async function observe({
   supportedActions?: string[];
   variables?: Variables;
 }) {
-  const isGPT5 = llmClient.modelName.includes("gpt-5"); // TODO: remove this as we update support for gpt-5 configuration options
-
   const observeSchema = z.object({
     elements: z
       .array(
@@ -267,7 +282,7 @@ export async function observe({
             .string()
             .regex(/^\d+-\d+$/)
             .describe(
-              "the ID string associated with the element. Never include surrounding square brackets. This field must follow the format of 'number-number'.",
+              "the exact ID string associated with the element. Never include surrounding square brackets. This field must follow the format of 'number-number'. For example, if the accessibility tree shows [0-18372], return '0-18372', not '18372'.",
             ),
           description: z
             .string()
@@ -331,7 +346,6 @@ export async function observe({
         schema: observeSchema,
         name: "Observation",
       },
-      temperature: isGPT5 ? 1 : 0.1,
       top_p: 1,
       frequency_penalty: 0,
       presence_penalty: 0,
@@ -408,36 +422,41 @@ export async function act({
   logger: (message: LogLine) => void;
   logInferenceToFile?: boolean;
 }) {
-  const isGPT5 = llmClient.modelName.includes("gpt-5"); // TODO: remove this as we update support for gpt-5 configuration options
-
   const actSchema = z.object({
-    elementId: z
-      .string()
-      .regex(/^\d+-\d+$/)
-      .describe(
-        "the ID string associated with the element. Never include surrounding square brackets. This field must follow the format of 'number-number'. for example, '0-76' or '16-21'",
-      ),
-    description: z
-      .string()
-      .describe("a description of the accessible element and its purpose"),
-    method: z
-      .enum(
-        // Use Object.values() for Zod v3 compatibility - z.enum() in v3 doesn't accept TypeScript enums directly
-        Object.values(SupportedUnderstudyAction) as unknown as readonly [
-          string,
-          ...string[],
-        ],
-      )
-      .describe(
-        "the candidate method/action to interact with the element. Select one of the available Understudy interaction methods.",
-      ),
-    arguments: z.array(
-      z
-        .string()
-        .describe(
-          "the arguments to pass to the method. For example, for a click, the arguments are empty, but for a fill, the arguments are the value to fill in.",
+    action: z
+      .object({
+        elementId: z
+          .string()
+          .regex(/^\d+-\d+$/)
+          .describe(
+            "the ID string associated with the element. Never include surrounding square brackets. This field must follow the format of 'number-number'. for example, '0-76' or '16-21'",
+          ),
+        description: z
+          .string()
+          .describe("a description of the accessible element and its purpose"),
+        method: z
+          .enum(
+            // Use Object.values() for Zod v3 compatibility - z.enum() in v3 doesn't accept TypeScript enums directly
+            Object.values(SupportedUnderstudyAction) as unknown as readonly [
+              string,
+              ...string[],
+            ],
+          )
+          .describe(
+            "the candidate method/action to interact with the element. Select one of the available Understudy interaction methods.",
+          ),
+        arguments: z.array(
+          z
+            .string()
+            .describe(
+              "the arguments to pass to the method. For example, for a click, the arguments are empty, but for a fill, the arguments are the value to fill in.",
+            ),
         ),
-    ),
+      })
+      .nullable()
+      .describe(
+        "The element to act on. Return null if no element on the page matches the instruction — do NOT fabricate or guess an element, and never emit empty strings or placeholder values.",
+      ),
     twoStep: z.boolean(),
   });
 
@@ -471,7 +490,6 @@ export async function act({
         schema: actSchema,
         name: "act",
       },
-      temperature: isGPT5 ? 1 : 0.1,
       top_p: 1,
       frequency_penalty: 0,
       presence_penalty: 0,
@@ -512,12 +530,14 @@ export async function act({
     });
   }
 
-  const parsedElement = {
-    elementId: actData.elementId,
-    description: String(actData.description),
-    method: String(actData.method),
-    arguments: actData.arguments,
-  };
+  const parsedElement = actData.action
+    ? {
+        elementId: actData.action.elementId,
+        description: String(actData.action.description),
+        method: String(actData.action.method),
+        arguments: actData.action.arguments,
+      }
+    : undefined;
 
   return {
     element: parsedElement,

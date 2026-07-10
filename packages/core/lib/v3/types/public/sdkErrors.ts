@@ -78,6 +78,12 @@ export class UnsupportedAISDKModelProviderError extends StagehandError {
   }
 }
 
+export class StagehandUnsupportedBrowserFeatureError extends StagehandError {
+  constructor(feature: string, message: string, cause?: unknown) {
+    super(`Unsupported browser feature "${feature}": ${message}`, cause);
+  }
+}
+
 export class InvalidAISDKModelFormatError extends StagehandError {
   constructor(modelName: string) {
     super(
@@ -412,6 +418,17 @@ export class StagehandSetExtraHTTPHeadersError extends StagehandError {
   constructor(failures: string[]) {
     super(
       `setExtraHTTPHeaders failed for ${failures.length} session(s): ${failures.join(", ")}`,
+    );
+    this.failures = failures;
+  }
+}
+
+export class StagehandSetDomainPolicyError extends StagehandError {
+  public readonly failures: string[];
+
+  constructor(failures: string[]) {
+    super(
+      `setDomainPolicy failed for ${failures.length} session(s): ${failures.join(", ")}`,
     );
     this.failures = failures;
   }
